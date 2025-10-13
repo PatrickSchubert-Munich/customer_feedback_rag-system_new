@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "configurations": [
+    // {
+    //   "name": "Customer Feedback RAG System (Developer Mode)",
+    //   "type": "debugpy",
+    //   "request": "launch",
+    //   "module": "streamlit",
+    //   "args": ["run", "src/ui_main_dev.py"],
+    //   "console": "integratedTerminal"
+    // },
+    {
+      "name": "Customer Feedback RAG System (Production Mode)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": ["run", "./streamlit_app.py"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
