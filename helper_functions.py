@@ -8,8 +8,8 @@ from openai import AsyncAzureOpenAI, OpenAIError
 from typing import Any
 import pandas as pd
 
-from data.clean_csv_file import CSVloader
-from data.prepare_customer_data import PrepareCustomerData
+from clean_csv_file import CSVloader
+from prepare_customer_data import PrepareCustomerData
 from db.vectorstore_chroma import ChromaVectorStore
 from test.test_questions import TestQuestions
 
