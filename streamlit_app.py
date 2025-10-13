@@ -42,29 +42,8 @@ FILE_PATH_CSV = "./data/feedback_data.csv"
 VECTORSTORE_TYPE = "chroma"
 
 
-def render_native_response(result):
-    """Rendert die native SDK Response als Streamlit-Komponenten - optimiert für UI"""
-    if not hasattr(result, "final_output"):
-        return False
-    final_output = str(result.final_output)
-
-    # Prüfe ob es vom Output Summarizer kommt (enthält typische Markdown-Strukturen)
-    if (
-        "Executive Summary" in final_output
-        or "Key Insights" in final_output
-        or "Handlungsempfehlungen" in final_output
-    ):
-        render_structured_summary(final_output)
-        return True
-    else:
-        # Unbekanntes Format: nichts rendern; Aufrufer streamt Text
-        return False
-
-
-def render_structured_summary(summary):
-    """Rendert die benutzerfreundliche Textausgabe des Output Summarizer Agents direkt"""
-    # Der Agent gibt jetzt bereits formatierte, benutzerfreundliche Markdown-Ausgaben
-    st.markdown(str(summary))
+# Removed render_native_response and render_structured_summary functions
+# All responses are now handled uniformly with streaming
 
 
 def get_raw_response_text(result):
@@ -112,7 +91,7 @@ def process_user_query(user_input: str) -> None:
         # Thinking-Status entfernen
         thinking_placeholder.empty()
 
-        # Response verarbeiten und streamen
+        # Response verarbeiten und streamen - einheitlich für alle Response-Typen
         if isinstance(result, dict) and "error" in result:
             raw_response = f"Error: {result['error']}"
             st.write_stream(stream_response(
@@ -120,13 +99,8 @@ def process_user_query(user_input: str) -> None:
             ))
         else:
             raw_response = get_raw_response_text(result)
-
-            # Versuche strukturierte Darstellung - falls nicht möglich, streame Text
-            is_structured_rendered = render_native_response(result)
-
-            # Wenn keine strukturierte Darstellung möglich war, streame Text
-            if not is_structured_rendered:
-                st.write_stream(stream_response(f"**Customer Manager:**\n\n{raw_response}"))
+            # Einheitliches Streaming für alle Response-Typen - saubere Ausgabe ohne Agent-Namen
+            st.write_stream(stream_response(raw_response))
                 
 
     # Add to conversation history
@@ -385,26 +359,18 @@ def main():
                 st.write(f"{entry['user']}")
 
             with st.chat_message(name="assistant", avatar="🤖"):
-                # Display response in a clean format
-                if entry["response"].startswith("Error:"):
-                    st.error(entry["response"])
+                # Einheitliche Response-Darstellung für alle Typen
+                response_text = entry["response"]
+                if response_text.startswith("Error:"):
+                    st.error(response_text)
                 else:
-                    # Prüfe ob es eine strukturierte Summarizer-Antwort ist
-                    response_text = entry["response"]
-                    if (
-                        "executive_summary=" in response_text
-                        and "key_insights=" in response_text
-                    ):
-                        # Das ist eine UserFriendlySummary - zeige direkt an
-                        st.write(response_text)
-                    else:
-                        # Normale Textantwort
-                        if len(response_text) > 500:
-                            st.write(response_text[:500] + "...")
-                            with st.expander("Show full response"):
-                                st.write(response_text)
-                        else:
+                    # Alle Responses werden einheitlich behandelt - lange Texte mit Expander
+                    if len(response_text) > 500:
+                        st.write(response_text[:500] + "...")
+                        with st.expander("Show full response"):
                             st.write(response_text)
+                    else:
+                        st.write(response_text)
 
     # ============================================================================
     # PROCESS PENDING QUERIES FROM SIDEBAR
