@@ -1,5 +1,6 @@
 from agents import Agent
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+from helper_functions import get_model_name
 
 
 def create_customer_manager_agent(handoff_agents: list = []) -> Agent:
@@ -14,7 +15,7 @@ def create_customer_manager_agent(handoff_agents: list = []) -> Agent:
     """
     return Agent(
         name="Customer Manager",
-        model="openai-gpt4-omni",  # Upgraded to GPT-4o for better routing intelligence
+        model=get_model_name("gpt4o"),  # Automatische Azure/OpenAI Erkennung
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
 
         Du bist der Customer Manager Agent - der ENTRY POINT für Kundenfeedback-Analysen.

@@ -1,5 +1,6 @@
 from agents import Agent
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+from helper_functions import get_model_name
 
 
 def create_feedback_analysis_agent(search_tool, handoff_agents: list = []):
@@ -7,7 +8,7 @@ def create_feedback_analysis_agent(search_tool, handoff_agents: list = []):
     tools = [search_tool]
     return Agent(
         name="Feedback Analysis Expert",
-        model="openai-gpt4-mini",
+        model=get_model_name("gpt4o_mini"),
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
                 Du bist der "Feedback Analysis Expert" - spezialisiert auf die Analyse von Kundenfeedback, 
                 Problemmuster und inhaltliche Auswertungen.

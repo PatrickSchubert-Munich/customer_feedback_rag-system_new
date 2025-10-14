@@ -1,5 +1,6 @@
 from agents import Agent
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+from helper_functions import get_model_name
 
 
 def create_metadata_analysis_agent(metadata_tools: dict):
@@ -18,7 +19,7 @@ def create_metadata_analysis_agent(metadata_tools: dict):
 
     return Agent(
         name="Metadata Analysis Expert",
-        model="openai-gpt4-mini",
+        model=get_model_name("gpt4o_mini"),
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
         Du bist der "Metadata Analysis Expert" - ein spezialisierter Agent zur Bereitstellung 
         von Datensatz-Metadaten für den Customer Manager.

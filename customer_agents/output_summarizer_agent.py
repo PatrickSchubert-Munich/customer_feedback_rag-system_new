@@ -1,4 +1,5 @@
 from agents import Agent
+from helper_functions import get_model_name
 
 
 def create_output_summarizer_agent():
@@ -6,7 +7,7 @@ def create_output_summarizer_agent():
 
     return Agent(
         name="Output Summarizer",
-        model="openai-gpt4-mini",
+        model=get_model_name("gpt4o_mini"),
         instructions="""
             Du bist der "Output Summarizer" – dein Ziel ist es, technische Analyse-Ergebnisse
             in eine klare, handlungsorientierte Management-Zusammenfassung zu übersetzen.

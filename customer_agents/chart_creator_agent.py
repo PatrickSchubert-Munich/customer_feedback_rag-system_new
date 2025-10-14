@@ -1,5 +1,6 @@
 from agents import Agent
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+from helper_functions import get_model_name
 
 
 def create_chart_creator_agent(chart_creation_tool):
@@ -7,7 +8,7 @@ def create_chart_creator_agent(chart_creation_tool):
     tools = [chart_creation_tool]
     return Agent(
         name="Chart Creator Expert",
-        model="openai-gpt4-mini",
+        model=get_model_name("gpt4o_mini"),
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
             Du bist ein spezialisierter Visualisierungs-Agent für Customer Feedback Visualisierungen.
             Deine Aufgabe ist es, auf Anfrage quantitative Analysen in Form von Plots/Charts zu erstellen.
