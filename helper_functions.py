@@ -4,9 +4,46 @@ from agents import (
     set_default_openai_api,
     set_tracing_disabled,
 )
-from openai import AsyncAzureOpenAI, OpenAIError
+from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAIError
 from typing import Any
 import pandas as pd
+
+
+def is_azure_openai() -> bool:
+    """Prüft ob Azure OpenAI konfiguriert ist basierend auf Umgebungsvariablen"""
+    return bool(
+        os.environ.get("AZURE_OPENAI_API_KEY") and 
+        os.environ.get("AZURE_OPENAI_ENDPOINT") and 
+        os.environ.get("AZURE_OPENAI_API_VERSION")
+    )
+
+
+def get_model_name(model_type: str = "gpt4o") -> str:
+    """
+    Gibt den korrekten Modellnamen basierend auf Azure/OpenAI Konfiguration zurück
+    
+    Args:
+        model_type: "gpt4o" für GPT-4 Omni oder "gpt4o_mini" für GPT-4 Omni Mini
+    
+    Returns:
+        str: Korrekter Modellname für Azure OpenAI oder Standard OpenAI
+    """
+    if is_azure_openai():
+        # Azure OpenAI Deployment-Namen (wie sie aktuell verwendet werden)
+        if model_type == "gpt4o":
+            return "openai-gpt4-omni"  # Azure Deployment Name
+        elif model_type == "gpt4o_mini":
+            return "openai-gpt4-mini"  # Azure Deployment Name
+        else:
+            return "openai-gpt4-mini"  # Fallback
+    else:
+        # Standard OpenAI API Modellnamen
+        if model_type == "gpt4o":
+            return "gpt-4o"  # Standard OpenAI Name
+        elif model_type == "gpt4o_mini":
+            return "gpt-4o-mini"  # Standard OpenAI Name
+        else:
+            return "gpt-4o-mini"  # Fallback
 
 from clean_csv_file import CSVloader
 from prepare_customer_data import PrepareCustomerData
@@ -25,7 +62,7 @@ def load_csv(path: str, write_local: bool = False) -> pd.DataFrame:
         nps_category=True,
         nps_category_col_name="NPS",
         feedback_length=True,
-        feedback_token_model="gpt-4o-mini",
+        feedback_token_model=get_model_name("gpt4o_mini"),
         feedback_col_name="Verbatim",
         sentiment_analysis=True,
         sentiment_col_name="Verbatim",
@@ -69,8 +106,12 @@ def load_vectorstore(
         )
         get_vectorstore_info(collection=chroma_collection)
 
-        if not validate_vectorstore(chroma_collection):
+        # Prüfe nur ob Collection existiert, nicht ob sie leer ist
+        if chroma_collection is None:
+            print("❌ FEHLER: VectorStore konnte nicht erstellt/geladen werden!")
             return None
+        
+        # Gebe Collection zurück, auch wenn sie leer ist
         return chroma_collection
     print(
         f"❌ FEHLER: Unbekannter VectorStore-Typ '{type}'. Have to be 'chroma' for now."
@@ -123,6 +164,24 @@ def get_azure_openai_client() -> AsyncAzureOpenAI | None:
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
         print("❌ FEHLER: Azure OpenAI Client konnte nicht initialisiert werden!")
+    return None
+
+
+def get_openai_client() -> AsyncOpenAI | None:
+    # Check required environment variables
+    if not os.environ.get("OPENAI_API_KEY", ""):
+        raise ValueError("OPENAI_API_KEY environment variable not set")
+
+    try:
+        openai_client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+        print("✅ OpenAI Client initialized")
+        return openai_client
+    except OpenAIError as e:
+        print(f"OpenAI API Error: {str(e)}")
+        print("❌ FEHLER: OpenAI Client konnte nicht initialisiert werden!")
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
+        print("❌ FEHLER: OpenAI Client konnte nicht initialisiert werden!")
     return None
 
 
