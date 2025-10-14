@@ -161,7 +161,7 @@ def render_simple_footer(message: str = "Customer Feedback Analysis System") -> 
         "avg_response_length": 0,
     }
 
-    # Custom Content mit verbessertem Styling
+    # Custom Content
     custom_content = f"""
     <div class="footer-main-content" style="opacity: 0.9; font-weight: 500;">
         {message}
