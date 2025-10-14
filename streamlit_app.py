@@ -6,12 +6,14 @@ Identical functionality to app.py with clean main() structure.
 
 import streamlit as st
 import asyncio
+import os
 import time
 from agents import SQLiteSession
 from dotenv import load_dotenv
 
 # Import existing system components - identical to app.py
-from agents import Runner
+from agents import Runner, trace
+from prepare_customer_data import PrepareCustomerData
 from customer_agents.chart_creator_agent import create_chart_creator_agent
 from customer_agents_tools.robust_search_tool_factory import RobustSearchToolFactory
 from customer_agents.feedback_analysis_agent import create_feedback_analysis_agent
@@ -23,8 +25,10 @@ from customer_agents.output_summarizer_agent import create_output_summarizer_age
 
 from helper_functions import (
     get_azure_openai_client,
+    get_openai_client,
     load_csv,
     load_vectorstore,
+    is_azure_openai,
 )
 
 # Import our simple history manager
@@ -39,23 +43,37 @@ load_dotenv()
 
 # Configuration - identical to app.py
 FILE_PATH_CSV = "./data/feedback_data.csv"
+# FILE_PATH_CSV = f"{FILE_PATH_CSV_RAW.split(".csv")[0]}_enhanced.csv"
 VECTORSTORE_TYPE = "chroma"
 
+# AZURE OPENAI OR OPENAI - Automatische Erkennung basierend auf Umgebungsvariablen
+IS_AZURE_OPENAI = is_azure_openai()
+
+# HISTORY LIMIT - Begrenzt die Anzahl der Historie-Turns an die LLM
+# None = unbegrenzt (alle Historie wird gesendet)
+# 5 = nur die letzten 5 Interaktionen werden gesendet
+# Empfohlen: 3-5 für Balance zwischen Kontext und Kosten
+HISTORY_LIMIT = 5  # Begrenzt auf letzte 5 Interaktionen
+
+# EXAMPLE QUERIES - Vordefinierte Beispiel-Fragen für die Sidebar
+# Diese können leicht angepasst werden, um verschiedene Use Cases zu demonstrieren
+EXAMPLE_QUERIES = [
+    "Welche Märkte gibt es?",
+    "Wie ist die NPS-Verteilung?",
+    "Top 5 Kundenbeschwerden?",
+    "Analysiere negative Feedbacks",
+    "Sentiment der Promoter?",
+]
 
 # Removed render_native_response and render_structured_summary functions
 # All responses are now handled uniformly with streaming
-
-
-def get_raw_response_text(result):
-    """Extrahiert den rohen Response-Text für Conversation Tracking"""
-    return str(result.final_output) if hasattr(result, "final_output") else str(result)
-
 
 def ensure_session_initialized():
     """Stellt sicher, dass die Session initialisiert ist. Wiederverwendbare Funktion."""
     if "session" not in st.session_state:
         st.session_state.session = SQLiteSession(
-            "streamlit_feedback_session", "streamlit_conversation_history.db"
+            "streamlit_feedback_session", 
+            "streamlit_conversation_history.db"
         )
     return st.session_state.session
 
@@ -66,98 +84,116 @@ def get_cached_conversation_stats():
     return st.session_state.conversation.get_summary_stats()
 
 
-def process_user_query(user_input: str) -> None:
-    """
-    Verarbeitet eine Benutzereingabe mit Live-Streaming der neuen Antwort.
-    """
-    # Ensure session is initialized
-    session = ensure_session_initialized()
-
-    # 1. User-Nachricht anzeigen
-    with st.chat_message("user"):
-        st.write(user_input)
-
-    # 2. Assistant-Nachricht mit Streaming
-    with st.chat_message("assistant"):
-        # Thinking-Status anzeigen
-        thinking_placeholder = st.empty()
-        thinking_placeholder.write("🤔 **Thinking...**")
-
-        # Backend-Verarbeitung
-        result = asyncio.run(
-            process_query(st.session_state.customer_manager, user_input, session)
-        )
-
-        # Thinking-Status entfernen
-        thinking_placeholder.empty()
-
-        # Response verarbeiten und streamen - einheitlich für alle Response-Typen
-        if isinstance(result, dict) and "error" in result:
-            raw_response = f"Error: {result['error']}"
-            st.write_stream(stream_response(
-                f"❌ **ERROR:** {result['error']}\n\n**Error Type:** {result.get('error_type', 'Unknown')}"
-            ))
-        else:
-            raw_response = get_raw_response_text(result)
-            # Einheitliches Streaming für alle Response-Typen - saubere Ausgabe ohne Agent-Namen
-            st.write_stream(stream_response(raw_response))
-                
-
-    # Add to conversation history
-    st.session_state.conversation.add_interaction(
-        user_input=user_input,
-        agent_response=raw_response,
-        agent_name="Customer Manager",
-    )
-
-    # Show stats as toast
-    fresh_stats = st.session_state.conversation.get_summary_stats()
-    st.toast(
-        f"💬 Conversation: {fresh_stats['total_interactions']} interactions | Session: {fresh_stats['session_id']}",
-        icon="📊",
-    )
-
-    # Mark that we just processed a query (to avoid showing it twice in history)
-    st.session_state.just_processed_query = True
-
-
 def stream_response(response: str, delay: float = 0.05):
     """
-    Streamt Text Zeichen für Zeichen für eine natürliche Anzeige.
-
+    Streamt Text wortweise für natürliche Anzeige mit Streamlit.
+    
     Args:
-        text: Der zu streamende Text
-        delay: Delay zwischen Zeichen in Sekunden
+        response: Der zu streamende Text
+        delay: Delay zwischen Wörtern in Sekunden (schneller für bessere UX)
     """
+    response = response.copy()
     for word in response.split():
         yield word + " "
         time.sleep(delay)
 
 
+def process_user_query(user_input: str) -> None:
+    """
+    Verarbeitet eine Benutzereingabe mit gestreamter Antwort.
+    Flow: Zeige Frage → Zeige "Thinking..." → Streame Antwort → Speichere in History
+    """
+    # Ensure session is initialized
+    session = ensure_session_initialized()
+
+    # 1. Zeige User-Frage sofort an
+    with st.chat_message("user", avatar="🧑"):
+        st.write(user_input)
+
+    # 2. Zeige "Thinking..." Placeholder
+    with st.chat_message("assistant", avatar="🧠"):
+        placeholder = st.empty()
+        placeholder.markdown("Thinking...")
+        
+        # Backend-Verarbeitung
+        response = asyncio.run(
+            process_query(st.session_state.customer_manager, user_input, session)
+        )
+        
+        # Handle both success and error cases
+        if isinstance(response, dict) and "error" in response:
+            # Handle error case
+            error_message = f"**ERROR ({response.get('error_type', 'Unknown')}):** {response['error']}"
+            placeholder.error(error_message)
+            response_content = error_message
+        else:
+            # Handle success case - result has final_output attribute
+            raw_response = str(response.final_output) # type: ignore
+        
+            # Stream response to user
+            full_response = placeholder.write_stream(stream_response(raw_response))
+            
+            # Extract response content from stream
+            response_content = (full_response 
+                if isinstance(full_response, str) 
+                else "".join(str(chunk) for chunk in full_response)
+            )
+        
+        # Always add to conversation history (both success and error cases)
+        # Note: Agent name is "Assistant" as responses may come from various specialized agents
+        st.session_state.conversation.add_interaction(
+            user_input=user_input,
+            agent_response=response_content,
+            agent_name="Assistant")
+
+
 @st.cache_resource(show_spinner=False)
-def initialize_system():
+def initialize_system(is_azure_openai: bool=False):
     """Initialize the RAG system components - identical structure to app.py main()"""
 
-    # Initialize OpenAI client FIRST (required for VectorStore) - identical to app.py
-    azure_client = get_azure_openai_client()
-    if azure_client is None:
-        st.error("❌ Azure OpenAI Client konnte nicht initialisiert werden!")
-        st.stop()
+    if is_azure_openai:
+        # Initialize OpenAI client FIRST (required for VectorStore) - identical to app.py
+        azure_client = get_azure_openai_client()
+        if azure_client is None:
+            st.error("❌ Azure OpenAI Client konnte nicht initialisiert werden!")
+            st.stop()
+    else:
+        openai_client = get_openai_client()
+        if openai_client is None:
+            st.error("❌ OpenAI Client konnte nicht initialisiert werden!")
+            st.stop()
+    
+    if os.path.exists(FILE_PATH_CSV):
+        # Load data and tools - identical to app.py
+        customer_data = load_csv(path=FILE_PATH_CSV, write_local=True)
+    else:
+        raise FileNotFoundError(f"CSV - File {FILE_PATH_CSV} not found.")
 
-    # Load data and tools - identical to app.py
-    customer_data = load_csv(path=FILE_PATH_CSV, write_local=False)
-
-    # Log loaded data count
+    # Versuche zuerst existierenden VectorStore zu laden
     collection = load_vectorstore(
         data=customer_data, type=VECTORSTORE_TYPE, create_new_store=False
     )
 
-    # VALIDIERUNG: VectorStore muss Daten enthalten - identical to app.py
+    # VALIDIERUNG: Erstelle neuen VectorStore nur wenn er nicht existiert ODER leer ist
     if collection is None:
-        st.error("❌ VectorStore collection is None!")
+        st.warning("⚠️ VectorStore existiert nicht. Erstelle neuen VectorStore...")
+        collection = load_vectorstore(
+            data=customer_data, type=VECTORSTORE_TYPE, create_new_store=True
+        )
+    elif collection.count() == 0:
+        st.warning("⚠️ VectorStore ist leer. Erstelle neuen VectorStore für funktionierende App...")
+        collection = load_vectorstore(
+            data=customer_data, type=VECTORSTORE_TYPE, create_new_store=True
+        )
+    else:
+        st.success(f"✅ Existierender VectorStore geladen mit {collection.count():,} Dokumenten")
+    
+    # Finale Validierung nach möglicher Neuerstellung
+    if collection is None:
+        st.error("❌ VectorStore konnte nicht erstellt werden!")
         st.stop()
     if collection.count() == 0:
-        st.error("❌ VectorStore is empty!")
+        st.error("❌ VectorStore ist nach Erstellung immer noch leer!")
         st.stop()
 
     # Use enhanced search tool with better error handling - identical to app.py
@@ -199,12 +235,46 @@ def initialize_system():
     return customer_manager, collection
 
 
+def limit_session_history(session, max_history: int | None = None):
+    """
+    Begrenzt die Session-Historie auf die letzten N Einträge.
+    
+    Args:
+        session: SQLiteSession Objekt
+        max_history: Maximale Anzahl Historie-Einträge (None = unbegrenzt)
+    
+    Returns:
+        Session mit begrenzter Historie (oder Original wenn nicht begrenzt)
+    """
+    if max_history is None or max_history <= 0:
+        return session
+    
+    try:
+        # Hole aktuelle Historie
+        history = session.get_history()
+        
+        # Wenn Historie zu lang ist, behalte nur die letzten N Einträge
+        if len(history) > max_history:
+            # Lösche ältere Einträge aus der Datenbank
+            entries_to_keep = history[-max_history:]
+            
+            # Erstelle neue Session mit begrenzter Historie
+            # (Die alte Session wird intern begrenzt)
+            session.set_history(entries_to_keep)
+            
+    except (AttributeError, Exception) as e:
+        # Falls Session keine History-Methoden hat, gib Original zurück
+        pass
+    
+    return session
+
+
 async def process_query(customer_manager, user_input: str, session=None):
     """Process user query with enhanced functionality - returns result object for Streamlit rendering"""
     try:
         if session:
-            # Session-aware execution with automatic history management and enhanced tracing - identical to app.py
-            from agents import trace
+            # HISTORIE BEGRENZEN für Token-Optimierung
+            session = limit_session_history(session, HISTORY_LIMIT)
 
             with trace(
                 "Customer Feedback Multi-Agent Analysis",
@@ -265,7 +335,7 @@ def main():
     if "system_initialized" not in st.session_state:
         with st.spinner("🔄 Initializing RAG system..."):
             try:
-                customer_manager, collection = initialize_system()
+                customer_manager, collection = initialize_system(is_azure_openai=IS_AZURE_OPENAI)
                 st.session_state.customer_manager = customer_manager
                 st.session_state.collection = collection
                 st.session_state.system_initialized = True
@@ -284,18 +354,12 @@ def main():
         # Predefined example queries - moved to top
         st.subheader("💡 Example Queries")
 
-        example_queries = [
-            "Welche Märkte gibt es?",
-            "Wie ist die NPS-Verteilung?",
-            "Top 5 Kundenbeschwerden?",
-            "Negative Feedbacks analysieren",
-            "Sentiment der Promoter?",
-        ]
-
-        for query in example_queries:
+        # Use globally defined example queries from configuration section
+        for query in EXAMPLE_QUERIES:
             if st.button(query, key=f"sidebar_{query}", use_container_width=True):
-                # Set query in session state for processing in main area
-                st.session_state.pending_query = query
+                # Process example query directly and trigger rerun
+                process_user_query(query)
+                st.rerun()
 
         st.divider()
 
@@ -324,6 +388,12 @@ def main():
         st.subheader("📈 System Info")
 
         st.info(f"Documents: {st.session_state.collection.count():,}")
+        
+        # History Limit Info
+        if HISTORY_LIMIT:
+            st.caption(f"💡 Historie-Limit: {HISTORY_LIMIT} Turns (spart Token-Kosten)")
+        else:
+            st.caption("⚠️ Historie unbegrenzt (höhere Token-Kosten)")
 
         # Combined Conversation Statistics - moved to bottom
         stats = get_cached_conversation_stats()
@@ -338,51 +408,6 @@ def main():
             for agent, count in stats["agents_used"].items():
                 st.write(f"• {agent}: {count}x")
 
-    # Main chat interface - now full width
-    # Display conversation history (exclude the currently processed query to avoid duplicates)
-    history = st.session_state.conversation.get_history()
-
-    # Exclude the last entry if we just processed a query
-    if (
-        hasattr(st.session_state, "just_processed_query")
-        and st.session_state.just_processed_query
-    ):
-        history = history[:-1]  # Exclude the latest entry
-        st.session_state.just_processed_query = False
-
-    # Chat container with fixed height and scrolling
-    chat_container = st.container()
-
-    with chat_container:
-        for i, entry in enumerate(history):
-            with st.chat_message(name="user", avatar="🧑"):
-                st.write(f"{entry['user']}")
-
-            with st.chat_message(name="assistant", avatar="🤖"):
-                # Einheitliche Response-Darstellung für alle Typen
-                response_text = entry["response"]
-                if response_text.startswith("Error:"):
-                    st.error(response_text)
-                else:
-                    # Alle Responses werden einheitlich behandelt - lange Texte mit Expander
-                    if len(response_text) > 500:
-                        st.write(response_text[:500] + "...")
-                        with st.expander("Show full response"):
-                            st.write(response_text)
-                    else:
-                        st.write(response_text)
-
-    # ============================================================================
-    # PROCESS PENDING QUERIES FROM SIDEBAR
-    # ============================================================================
-
-    # Check for pending query from Example Query buttons
-    if hasattr(st.session_state, "pending_query"):
-        query = st.session_state.pending_query
-        delattr(st.session_state, "pending_query")
-        # Process in main area (not sidebar)
-        process_user_query(query)
-
     # ============================================================================
     # CHAT INPUT AT BOTTOM - Fixed position
     # ============================================================================
@@ -390,10 +415,34 @@ def main():
     # User input at the bottom of the page
     user_input = st.chat_input("Ask about customer feedback...")
 
-    # Process chat input if provided
+    # Process chat input if provided (this adds to history internally)
     if user_input:
         # Use unified query processing function with direct chat integration
         process_user_query(user_input)
+
+    # ============================================================================
+    # CHAT HISTORY DISPLAY - Shows all previous messages
+    # ============================================================================
+    
+    # Load history AFTER potential processing to include new messages
+    history = st.session_state.conversation.get_history()
+    
+    # Chat container with all messages (static display)
+    chat_container = st.container()
+
+    with chat_container:
+        for _ , entry in enumerate(history):
+            # User message
+            with st.chat_message(name="user", avatar="🧑"):
+                st.write(entry["user"])
+
+            # Assistant response
+            with st.chat_message(name="assistant", avatar="🤖"):
+                response_text = entry["response"]
+                if response_text.startswith("❌ **ERROR:**"):
+                    st.error(response_text)
+                else:
+                    st.markdown(response_text)
 
     # ============================================================================
     # FOOTER - Modular Footer with Live Statistics
