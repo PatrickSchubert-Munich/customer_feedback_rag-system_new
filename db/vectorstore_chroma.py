@@ -31,26 +31,39 @@ class ChromaVectorStore(VectorStore):
         self._embedding_function = self._create_embedding_function()
 
     def _create_embedding_function(self):
-        """Erstellt Azure OpenAI Embedding Function."""
+        """Erstellt OpenAI Embedding Function - unterstützt sowohl Azure als auch Standard OpenAI."""
+        # Prüfe zuerst auf Azure OpenAI
         azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
-        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv(
-            "OPENAI_API_BASE"
-        )
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("OPENAI_API_BASE")
         azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
 
-        if not azure_api_key:
-            raise ValueError("AZURE_OPENAI_API_KEY Umgebungsvariable ist erforderlich")
-        if not azure_endpoint:
-            raise ValueError("AZURE_OPENAI_ENDPOINT Umgebungsvariable ist erforderlich")
+        # Prüfe auf Standard OpenAI
+        openai_api_key = os.getenv("OPENAI_API_KEY")
 
-        return embedding_functions.OpenAIEmbeddingFunction(
-            api_key=azure_api_key,
-            api_base=azure_endpoint,
-            api_type="azure",
-            api_version=azure_api_version,
-            deployment_id=self.embedding_model,
-            dimensions=self._MODEL_DIMENSIONS.get(self.embedding_model, 384),
-        )
+        # Azure OpenAI hat Priorität, falls vollständig konfiguriert
+        if azure_api_key and azure_endpoint:
+            print("✅ Verwende Azure OpenAI für Embeddings")
+            return embedding_functions.OpenAIEmbeddingFunction(
+                api_key=azure_api_key,
+                api_base=azure_endpoint,
+                api_type="azure",
+                api_version=azure_api_version,
+                deployment_id=self.embedding_model,
+                dimensions=self._MODEL_DIMENSIONS.get(self.embedding_model, 384),
+            )
+        
+        # Fallback zu Standard OpenAI
+        elif openai_api_key:
+            print("✅ Verwende Standard OpenAI für Embeddings")
+            return embedding_functions.OpenAIEmbeddingFunction(
+                api_key=openai_api_key,
+                model_name=self.embedding_model,
+                dimensions=self._MODEL_DIMENSIONS.get(self.embedding_model, 384),
+            )
+        
+        # Keine gültigen API Keys gefunden
+        else:
+            raise ValueError("Weder AZURE_OPENAI_API_KEY+AZURE_OPENAI_ENDPOINT noch OPENAI_API_KEY Umgebungsvariablen sind gesetzt")
 
     def _ensure_persist_directory(self) -> None:
         """Erstellt Persist-Verzeichnis und prüft Schreibrechte."""
