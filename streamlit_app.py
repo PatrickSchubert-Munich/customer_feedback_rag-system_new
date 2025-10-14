@@ -69,11 +69,15 @@ EXAMPLE_QUERIES = [
 # All responses are now handled uniformly with streaming
 
 def ensure_session_initialized():
-    """Stellt sicher, dass die Session initialisiert ist. Wiederverwendbare Funktion."""
+    """
+    Stellt sicher, dass die Session initialisiert ist.
+    Verwendet In-Memory SQLite (:memory:) für nicht-persistente Sessions.
+    Session existiert nur während der aktuellen Browser-Session.
+    """
     if "session" not in st.session_state:
         st.session_state.session = SQLiteSession(
             "streamlit_feedback_session", 
-            "streamlit_conversation_history.db"
+            ":memory:"  # In-Memory Datenbank - keine Persistenz
         )
     return st.session_state.session
 
@@ -92,7 +96,6 @@ def stream_response(response: str, delay: float = 0.05):
         response: Der zu streamende Text
         delay: Delay zwischen Wörtern in Sekunden (schneller für bessere UX)
     """
-    response = response.copy()
     for word in response.split():
         yield word + " "
         time.sleep(delay)
@@ -130,14 +133,17 @@ def process_user_query(user_input: str) -> None:
             # Handle success case - result has final_output attribute
             raw_response = str(response.final_output) # type: ignore
         
-            # Stream response to user
-            full_response = placeholder.write_stream(stream_response(raw_response))
+            # Stream response to user (visual effect only)
+            placeholder.write_stream(stream_response(raw_response))
             
-            # Extract response content from stream
-            response_content = (full_response 
-                if isinstance(full_response, str) 
-                else "".join(str(chunk) for chunk in full_response)
-            )
+            # Use the ORIGINAL raw_response for storage (not the streamed version)
+            # This preserves Markdown syntax (##, **, etc.) correctly
+            response_content = raw_response
+            
+            # Clear placeholder and replace with properly formatted Markdown
+            # This ensures correct rendering of headers (##), bold text (**), lists, etc.
+            placeholder.empty()
+            placeholder.markdown(response_content)
         
         # Always add to conversation history (both success and error cases)
         # Note: Agent name is "Assistant" as responses may come from various specialized agents
@@ -357,8 +363,8 @@ def main():
         # Use globally defined example queries from configuration section
         for query in EXAMPLE_QUERIES:
             if st.button(query, key=f"sidebar_{query}", use_container_width=True):
-                # Process example query directly and trigger rerun
-                process_user_query(query)
+                # Store query to be processed outside sidebar (in main area)
+                st.session_state.pending_example_query = query
                 st.rerun()
 
         st.divider()
@@ -408,9 +414,36 @@ def main():
             for agent, count in stats["agents_used"].items():
                 st.write(f"• {agent}: {count}x")
 
-    # ============================================================================
-    # CHAT INPUT AT BOTTOM - Fixed position
-    # ============================================================================
+# ============================================================================
+# CHAT HISTORY DISPLAY - Shows all previous messages
+# ============================================================================
+    
+    # Load and display history FIRST (before processing new queries)
+    history = st.session_state.conversation.get_history()
+    
+    # Chat container with all messages (static display)
+    for _ , entry in enumerate(history):
+        # User message
+        with st.chat_message(name="user", avatar="🧑"):
+            st.write(entry["user"])
+
+        # Assistant response
+        with st.chat_message(name="assistant", avatar="🧠"):
+            response_text = entry["response"]
+            if response_text.startswith("❌ **ERROR:**"):
+                st.error(response_text)
+            else:
+                st.markdown(response_text)
+
+# ============================================================================
+# CHAT INPUT AT BOTTOM - Fixed position
+# ============================================================================
+
+    # Check for pending example query from sidebar (must be processed in main area)
+    if "pending_example_query" in st.session_state:
+        query = st.session_state.pending_example_query
+        del st.session_state.pending_example_query
+        process_user_query(query)
 
     # User input at the bottom of the page
     user_input = st.chat_input("Ask about customer feedback...")
@@ -420,33 +453,9 @@ def main():
         # Use unified query processing function with direct chat integration
         process_user_query(user_input)
 
-    # ============================================================================
-    # CHAT HISTORY DISPLAY - Shows all previous messages
-    # ============================================================================
-    
-    # Load history AFTER potential processing to include new messages
-    history = st.session_state.conversation.get_history()
-    
-    # Chat container with all messages (static display)
-    chat_container = st.container()
-
-    with chat_container:
-        for _ , entry in enumerate(history):
-            # User message
-            with st.chat_message(name="user", avatar="🧑"):
-                st.write(entry["user"])
-
-            # Assistant response
-            with st.chat_message(name="assistant", avatar="🤖"):
-                response_text = entry["response"]
-                if response_text.startswith("❌ **ERROR:**"):
-                    st.error(response_text)
-                else:
-                    st.markdown(response_text)
-
-    # ============================================================================
-    # FOOTER - Modular Footer with Live Statistics
-    # ============================================================================
+# ============================================================================
+# FOOTER - Modular Footer with Live Statistics
+# ============================================================================
 
     # Use modular footer component with cached stats
     stats = get_cached_conversation_stats()
