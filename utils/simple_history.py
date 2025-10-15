@@ -79,19 +79,34 @@ class SimpleConversationHistory:
 
         self.history.append(entry)
 
-    def get_history(self, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_history(self, last_n: Optional[int] = None, strip_charts: bool = False) -> List[Dict[str, Any]]:
         """
         Hole die Conversation History.
 
         Args:
             last_n: Nur die letzten N Einträge (None = alle)
+            strip_charts: Wenn True, entferne __CHART__ Marker aus Responses
+                         (nützlich für Agent-Kontext, um Tokens zu sparen)
 
         Returns:
             Liste der Conversation Entries
         """
-        if last_n is None:
-            return self.history.copy()
-        return self.history[-last_n:] if last_n > 0 else []
+        history = self.history[-last_n:] if last_n and last_n > 0 else self.history.copy()
+        
+        if strip_charts:
+            # Entferne Chart-Marker für Agent-Kontext (Token-Optimierung)
+            import re
+            cleaned_history = []
+            for entry in history:
+                cleaned_entry = entry.copy()
+                response = entry["response"]
+                # Entferne __CHART__pfad__CHART__ Pattern
+                cleaned_response = re.sub(r'__CHART__[^_]+__CHART__', '', response)
+                cleaned_entry["response"] = cleaned_response.strip()
+                cleaned_history.append(cleaned_entry)
+            return cleaned_history
+        
+        return history
 
     def get_last_response(self) -> Optional[str]:
         """Hole die letzte Agent-Response oder None."""
