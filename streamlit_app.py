@@ -60,9 +60,10 @@ HISTORY_LIMIT = 5  # Begrenzt auf letzte 5 Interaktionen
 EXAMPLE_QUERIES = [
     "Welche Märkte gibt es?",
     "Wie ist die NPS-Verteilung?",
-    "Top 5 Kundenbeschwerden?",
+    "Top 5 Kundenbeschwerden",
     "Analysiere negative Feedbacks",
-    "Sentiment der Promoter?",
+    "Sentiment der Promoter",
+    "Balkenchart mit Märkten und Sentiments"
 ]
 
 # Removed render_native_response and render_structured_summary functions
@@ -86,6 +87,61 @@ def ensure_session_initialized():
 def get_cached_conversation_stats():
     """Cached wrapper für conversation stats um multiple API-Calls zu vermeiden."""
     return st.session_state.conversation.get_summary_stats()
+
+
+def extract_chart_path(text: str) -> tuple[str, str | None]:
+    """
+    Extrahiert Chart-Pfad aus Response-Text (Format: __CHART__[pfad]__CHART__).
+    
+    Returns:
+        tuple: (text_without_chart_marker, chart_path or None)
+    """
+    import re
+    pattern = r'__CHART__(.*?)__CHART__'
+    match = re.search(pattern, text)
+    
+    if match:
+        chart_path = match.group(1).strip()
+        text_without_marker = re.sub(pattern, '', text).strip()
+        return text_without_marker, chart_path
+    
+    return text, None
+
+
+def render_chart(chart_path: str, size: str = "Mittel") -> None:
+    """
+    Zeigt Chart mit gewählter Größe an (Klein/Mittel/Groß).
+    
+    Args:
+        chart_path: Pfad zum Chart
+        size: Größe ("Klein", "Mittel", "Groß")
+    """
+    if not os.path.exists(chart_path):
+        st.warning(f"⚠️ Chart nicht gefunden: {os.path.basename(chart_path)}")
+        return
+    
+    # Größen-Konfiguration: [left_margin, center_content, right_margin]
+    size_config = {
+        "Klein": [2, 2, 2],   # Schmal in der Mitte
+        "Mittel": [1, 3, 1],  # Standard
+        "Groß": [0, 1, 0]     # Vollbild
+    }
+    
+    cols = size_config.get(size, [1, 3, 1])
+    
+    try:
+        if cols == [0, 1, 0]:
+            # Vollbild
+            st.image(chart_path, use_container_width=True, 
+                    caption=f"📊 {os.path.basename(chart_path)}")
+        else:
+            # Mit Margins
+            col1, col2, col3 = st.columns(cols)
+            with col2:
+                st.image(chart_path, use_container_width=True,
+                        caption=f"📊 {os.path.basename(chart_path)}")
+    except Exception as e:
+        st.error(f"❌ Fehler beim Anzeigen: {e}")
 
 
 def stream_response(response: str, delay: float = 0.05):
@@ -124,6 +180,8 @@ def process_user_query(user_input: str) -> None:
         )
         
         # Handle both success and error cases
+        agent_name_str = "Assistant"  # Default fallback
+        
         if isinstance(response, dict) and "error" in response:
             # Handle error case
             error_message = f"**ERROR ({response.get('error_type', 'Unknown')}):** {response['error']}"
@@ -132,25 +190,37 @@ def process_user_query(user_input: str) -> None:
         else:
             # Handle success case - result has final_output attribute
             raw_response = str(response.final_output) # type: ignore
+            
+            # ✅ Agent-Tracking: Extrahiere Agent-Namen aus Response
+            agent_name = getattr(response, 'agent', None)
+            if agent_name and hasattr(agent_name, 'name'):
+                agent_name_str = agent_name.name
+            
+            # ✅ Chart-Erkennung: Extrahiere Chart-Pfad falls vorhanden
+            text_content, chart_path = extract_chart_path(raw_response)
         
             # Stream response to user (visual effect only)
-            placeholder.write_stream(stream_response(raw_response))
-            
-            # Use the ORIGINAL raw_response for storage (not the streamed version)
-            # This preserves Markdown syntax (##, **, etc.) correctly
-            response_content = raw_response
+            placeholder.write_stream(stream_response(text_content))
             
             # Clear placeholder and replace with properly formatted Markdown
             # This ensures correct rendering of headers (##), bold text (**), lists, etc.
             placeholder.empty()
-            placeholder.markdown(response_content)
+            placeholder.markdown(text_content)
+            
+            # ✅ Chart-Anzeige: Zeige Chart falls vorhanden
+            if chart_path:
+                chart_size = st.session_state.get('chart_size', 'Mittel')
+                render_chart(chart_path, size=chart_size)
+            
+            # ✅ WICHTIG: Speichere RAW response MIT Chart-Marker für History
+            # Damit Charts auch beim Neuladen der History angezeigt werden
+            response_content = raw_response
         
-        # Always add to conversation history (both success and error cases)
-        # Note: Agent name is "Assistant" as responses may come from various specialized agents
+        # ✅ Add to conversation history with actual agent name
         st.session_state.conversation.add_interaction(
             user_input=user_input,
             agent_response=response_content,
-            agent_name="Assistant")
+            agent_name=agent_name_str)
 
 
 @st.cache_resource(show_spinner=False)
@@ -224,18 +294,19 @@ def initialize_system(is_azure_openai: bool=False):
         handoff_agents=[output_summarizer],
     )
 
-    # Create Sentiment Analysis Agent - identical to app.py
+    # Create Chart Creator Agent (reads market mappings from Session Context)
     chart_creation_agent = create_chart_creator_agent(
         chart_creation_tool=create_chart_creation_tool(collection)
     )
 
-    # Customer Manager with all specialized agents - identical to app.py
+    # Customer Manager with all specialized agents + metadata tools for market mapping
     customer_manager = create_customer_manager_agent(
         handoff_agents=[
-            metadata_analysis_agent,  # NEW: Dedicated metadata expert
+            metadata_analysis_agent,  # Dedicated metadata expert
             feedback_analysis_agent,
             chart_creation_agent,
-        ]
+        ],
+        metadata_tools=metadata_tools  # For Two-Step Handoff (Manager resolves markets before Chart Creator)
     )
 
     return customer_manager, collection
@@ -244,32 +315,60 @@ def initialize_system(is_azure_openai: bool=False):
 def limit_session_history(session, max_history: int | None = None):
     """
     Begrenzt die Session-Historie auf die letzten N Einträge.
+    WICHTIG: Entfernt __CHART__ Marker aus History für Agent-Kontext!
     
     Args:
         session: SQLiteSession Objekt
         max_history: Maximale Anzahl Historie-Einträge (None = unbegrenzt)
     
     Returns:
-        Session mit begrenzter Historie (oder Original wenn nicht begrenzt)
+        Session mit begrenzter Historie und bereinigten Responses
     """
-    if max_history is None or max_history <= 0:
-        return session
+    import re
     
     try:
         # Hole aktuelle Historie
         history = session.get_history()
         
-        # Wenn Historie zu lang ist, behalte nur die letzten N Einträge
-        if len(history) > max_history:
-            # Lösche ältere Einträge aus der Datenbank
-            entries_to_keep = history[-max_history:]
+        if not history:
+            return session
+        
+        # ✅ CHART-BEREINIGUNG: Entferne __CHART__ Marker für Token-Optimierung
+        # Charts sind nur für UI relevant, nicht für Agent-Kontext!
+        cleaned_history = []
+        for entry in history:
+            # Erstelle Kopie des Eintrags
+            cleaned_entry = entry.copy()
             
-            # Erstelle neue Session mit begrenzter Historie
-            # (Die alte Session wird intern begrenzt)
-            session.set_history(entries_to_keep)
+            # Bereinige Response von Chart-Markern
+            if "content" in cleaned_entry:
+                content = cleaned_entry["content"]
+                if isinstance(content, list):
+                    # Handle multi-part content
+                    cleaned_content = []
+                    for part in content:
+                        if isinstance(part, dict) and "text" in part:
+                            # Entferne __CHART__pfad__CHART__ Pattern
+                            cleaned_text = re.sub(r'__CHART__[^_]+__CHART__', '', part["text"])
+                            part["text"] = cleaned_text.strip()
+                        cleaned_content.append(part)
+                    cleaned_entry["content"] = cleaned_content
+                elif isinstance(content, str):
+                    # Handle simple string content
+                    cleaned_entry["content"] = re.sub(r'__CHART__[^_]+__CHART__', '', content).strip()
+            
+            cleaned_history.append(cleaned_entry)
+        
+        # Begrenze History falls nötig
+        if max_history and len(cleaned_history) > max_history:
+            cleaned_history = cleaned_history[-max_history:]
+        
+        # Setze bereinigte History zurück
+        session.set_history(cleaned_history)
             
     except (AttributeError, Exception) as e:
-        # Falls Session keine History-Methoden hat, gib Original zurück
+        # Falls Session keine History-Methoden hat oder Fehler auftritt,
+        # gib Original zurück (Fallback für Robustheit)
         pass
     
     return session
@@ -368,6 +467,22 @@ def main():
                 st.rerun()
 
         st.divider()
+        
+        # ✅ Chart Size Selector (Clean & Simple)
+        st.subheader("📊 Chart-Größe")
+        
+        # Use radio buttons instead - no cutoff issues
+        chart_size = st.radio(
+            "Größe wählen",
+            options=["Klein", "Mittel", "Groß"],
+            index=1 if st.session_state.get('chart_size', 'Mittel') == 'Mittel' 
+                  else (0 if st.session_state.get('chart_size', 'Mittel') == 'Klein' else 2),
+            label_visibility="collapsed",
+            horizontal=True
+        )
+        st.session_state['chart_size'] = chart_size
+
+        st.divider()
 
         # Export options
         st.subheader("📄 Export Options")
@@ -433,7 +548,14 @@ def main():
             if response_text.startswith("❌ **ERROR:**"):
                 st.error(response_text)
             else:
-                st.markdown(response_text)
+                # ✅ Check for charts in history
+                text_content, chart_path = extract_chart_path(response_text)
+                st.markdown(text_content)
+                
+                # ✅ Render chart if found in history
+                if chart_path:
+                    chart_size = st.session_state.get('chart_size', 'Mittel')
+                    render_chart(chart_path, size=chart_size)
 
 # ============================================================================
 # CHAT INPUT AT BOTTOM - Fixed position

@@ -681,7 +681,7 @@ http = [
 [[package]]
 name = "genai-assistent-schubert-ss-2025"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
     { name = "datasets" },
