@@ -4,6 +4,13 @@ from agents import function_tool
 class RobustSearchToolFactory:
     """Verbesserte Search Tool Factory mit erweiterten Error Handling für LLM Feedback"""
 
+    # Confidence Thresholds für Semantic Search Quality
+    CONFIDENCE_THRESHOLDS = {
+        "REJECT": 0.40,      # Unter diesem Wert: Keine Ergebnisse
+        "LOW": 0.60,         # Unter diesem Wert: Warnung
+        "MEDIUM": 0.75,      # Gute Qualität
+    }
+
     @staticmethod
     def create_enhanced_search_tool(collection):
         """Erstellt Search Tool mit verbessertem Error Handling für LLMs"""
@@ -55,8 +62,79 @@ class RobustSearchToolFactory:
                 if len(documents) == 0:
                     return "📭 NO RESULTS: Search completed but found 0 matching feedback entries. Try different search terms."
 
+                # ========================================
+                # CONFIDENCE EVALUATION
+                # ========================================
+                similarities = [1 - d for d in distances]
+                avg_similarity = sum(similarities) / len(similarities)
+                top_similarity = similarities[0]
+                
+                print(f"📊 CONFIDENCE: Top={top_similarity:.3f}, Avg={avg_similarity:.3f}")
+                
+                # REJECT: Zu geringe Relevanz - keine Antwort
+                if top_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["REJECT"]:
+                    return f"""❌ KEINE RELEVANTEN ERGEBNISSE GEFUNDEN
+
+📊 Qualitäts-Metriken:
+   • Beste Übereinstimmung: {top_similarity:.1%}
+   • Durchschnitt: {avg_similarity:.1%}
+   • Schwellenwert: {RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["REJECT"]:.1%}
+
+⚠️  INTERPRETATION:
+Die semantische Ähnlichkeit zwischen Ihrer Anfrage und dem Datensatz ist zu gering.
+Das gesuchte Thema existiert wahrscheinlich nicht in dieser Form in den Kundenfeedbacks.
+
+💡 MÖGLICHE GRÜNDE:
+   1. Der Begriff wird im Datensatz anders formuliert
+   2. Das Thema ist nicht im Datensatz enthalten
+   3. Die Suchanfrage ist zu spezifisch
+
+✅ VORSCHLÄGE:
+   • Verwenden Sie allgemeinere Begriffe
+   • Prüfen Sie alternative Formulierungen
+   • Für diesen Datensatz besser geeignet:
+     - "Ersatzteil-Verfügbarkeit" statt "Lieferprobleme"
+     - "Wartezeiten Werkstatt" statt "Service-Verzögerungen"
+     - "Reparatur-Dauer" statt "Durchlaufzeiten"
+
+📋 Tipp: Verwenden Sie get_dataset_metadata um zu sehen, welche Themen verfügbar sind."""
+
+                # LOW CONFIDENCE: Schwache Relevanz - Warnung
+                elif avg_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"] or \
+                     top_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"]:
+                    confidence_level = "⚠️  NIEDRIGE RELEVANZ"
+                    confidence_msg = f"""
+⚠️  ACHTUNG: ERGEBNISSE MIT EINGESCHRÄNKTER RELEVANZ
+
+📊 Qualitäts-Metriken:
+   • Beste Übereinstimmung: {top_similarity:.1%}
+   • Durchschnitt: {avg_similarity:.1%}
+   
+Die folgenden Ergebnisse haben nur moderate semantische Ähnlichkeit mit Ihrer Anfrage.
+Bitte prüfen Sie die Relevanz der einzelnen Feedbacks kritisch.
+
+💡 Tipp: Falls die Ergebnisse nicht passen, versuchen Sie andere Suchbegriffe.
+
+"""
+                
+                # MEDIUM CONFIDENCE: Akzeptable Qualität
+                elif avg_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["MEDIUM"]:
+                    confidence_level = "✅ MODERATE RELEVANZ"
+                    confidence_msg = f"""
+✅ Gefunden: {len(documents)} Feedbacks (Ø Relevanz: {avg_similarity:.1%})
+
+"""
+                
+                # HIGH CONFIDENCE: Hohe Qualität
+                else:
+                    confidence_level = "✅ HOHE RELEVANZ"
+                    confidence_msg = f"""
+✅ Gefunden: {len(documents)} Feedbacks (Ø Relevanz: {avg_similarity:.1%})
+
+"""
+
                 # Format results with rich context
-                formatted_output = f"✅ SEARCH SUCCESS: Found {len(documents)} relevant customer feedback entries:\n\n"
+                formatted_output = f"{confidence_level}\n{confidence_msg}"
 
                 for i, (content, metadata, distance) in enumerate(
                     zip(documents, metadatas, distances)
@@ -87,21 +165,19 @@ class RobustSearchToolFactory:
                     formatted_output += "\n" + "=" * 50 + "\n\n"
 
                 # Add helpful summary
-                formatted_output += (
-                    f"📈 SUMMARY: Retrieved {len(documents)} feedback entries. "
-                )
+                formatted_output += f"\n📈 SUMMARY: {len(documents)} Feedbacks"
                 if metadatas:
                     markets = set(
                         m.get("market") for m in metadatas if m and m.get("market")
                     )
                     if markets:
-                        formatted_output += (
-                            f"Markets covered: {', '.join(sorted(markets))}. "
-                        )
+                        formatted_output += f" | Markets: {', '.join(sorted(markets))}"
 
-                formatted_output += "Use this data for your analysis."
-
-                print(f"✅ SEARCH SUCCESS: Returned {len(documents)} results")
+                # Add confidence interpretation for the LLM
+                if avg_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"]:
+                    formatted_output += "\n\n⚠️  LLM NOTE: Low confidence results. Consider mentioning limitations in your analysis."
+                
+                print(f"✅ SEARCH SUCCESS: {len(documents)} results (confidence: {avg_similarity:.2%})")
                 return formatted_output
 
             except Exception as e:
