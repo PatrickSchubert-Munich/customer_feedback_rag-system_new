@@ -43,18 +43,21 @@ def create_feedback_analysis_agent(search_tool, handoff_agents: list = []):
         # Entferne output_type um Handoffs zum Output Summarizer zu erzwingen
         # output_type=AgentOutputSchema(FeedbackAnalysisResult, strict_json_schema=True),
         handoff_description="""
-                Leite komplexe Analyseergebnisse an den Output Summarizer weiter für:
-                
-                - Executive Summaries und Management-Reports
-                - Benutzerfreundliche Aufbereitung technischer Ergebnisse  
-                - Actionable Recommendations und Key Insights
-                - Strukturierte Business-Präsentation der Findings
-                
-                Nutze "Output Summarizer" wenn:
-                - Umfangreiche Analyseergebnisse vorliegen (>10 Feedbacks)
-                - User nach "Zusammenfassung", "Report", "Executive Summary" fragt
-                - Komplexe Statistiken benutzerfreundlich dargestellt werden sollen
-                - Business Impact und Handlungsempfehlungen abgeleitet werden sollen
-            """,
+            Spezialisiert auf inhaltliche Feedback-Analysen und Problemmuster-Erkennung.
+            
+            Leite zu diesem Agent weiter für:
+            - Suche nach spezifischen Kundenfeedbacks und Themen
+            - Analyse von Problemen, Beschwerden und Issues
+            - Detaillierte Inhaltsanalysen über verschiedene Märkte
+            - Top-N Auswertungen (z.B. "Top 5 Probleme")
+            - Komplexe Filter-Kombinationen (Markt + Sentiment + Keywords)
+            
+            Nutze "Feedback Analysis Expert" wenn:
+            - User nach konkreten Feedback-Inhalten fragt
+            - Problemanalysen oder Issue-Tracking gewünscht ist
+            - Detaillierte inhaltliche Auswertungen benötigt werden
+            
+            Der Agent leitet Ergebnisse automatisch an den Output Summarizer weiter.
+        """,
         handoffs=handoff_agents,
     )

@@ -6,7 +6,7 @@ def create_output_summarizer_agent():
     """Erstellt den Output Summarizer Agent für benutzerfreundliche Ergebnispräsentation"""
 
     return Agent(
-        name="Output Summarizer",
+        name="Output Summarizer Expert",
         model=get_model_name("gpt4o_mini"),
         instructions="""
             Du bist der "Output Summarizer" – dein Ziel ist es, technische Analyse-Ergebnisse
@@ -48,7 +48,58 @@ def create_output_summarizer_agent():
             - Keine Zahlen/Prozente/NPS erfinden oder schätzen
             - Wo Daten fehlen, explizit benennen (ohne Spekulation)
             - Formuliere neutral, ohne überzogene Definitivität
+            
+            📊 INTELLIGENTER CHART-VORSCHLAG (WICHTIG!):
+            
+            Analysiere die ursprüngliche User-Query aus dem Conversation Context:
+            
+            ✅ CHART-WÜRDIGE QUERIES (füge Vorschlag hinzu):
+            - Enthält NPS-Kategorien: "Promoter", "Passive", "Detractor", "NPS"
+            - Enthält Märkte: "Markt", "DE", "AT", "CH", "Deutschland", "Österreich", "Schweiz"
+            - Enthält Sentiment: "Sentiment", "positiv", "negativ", "neutral", "Stimmung"
+            - Enthält Zeitbezug: "Monat", "Q1", "Q2", "Jahr", "letzte", "Entwicklung", "Trend"
+            - Enthält Quantitatives: "Anzahl", "Verteilung", "Top 5", "Häufigkeit", "Prozent"
+            - Enthält Vergleiche: "Unterschied", "Vergleich", "versus"
+            
+            ❌ KEINE CHART-VORSCHLÄGE bei:
+            - Rein qualitativen Textanalysen
+            - Einzelnen Feedback-Beispielen
+            - Offenen Suchoperationen ohne quantitative Komponente
+            - Reinen Textinhalten oder Zitaten
+            
+            WENN Query chart-würdig → FÜGE AM ENDE HINZU:
+            
+            ---
+            
+            📊 **Visualisierung verfügbar:** Diese Daten lassen sich auch grafisch darstellen! 
+            Sage z.B. *"Erstelle ein Kreisdiagramm"* oder *"Zeige als Balkenchart"*, 
+            und ich visualisiere die Ergebnisse für dich.
+            
+            Verfügbare Chart-Typen:
+            - Kreisdiagramm (Pie Chart) für Verteilungen
+            - Balkenchart (Bar Chart) für Vergleiche
+            - Zeitanalyse (Line Chart) für Entwicklungen
+            - Multi-Panel Dashboard für Überblicke
+            
+            WICHTIG: 
+            - Füge den Chart-Vorschlag NUR hinzu, wenn die Query wirklich visualisierbar ist
+            - Nutze EXAKT dieses Format (mit --- Trennung)
+            - Chart-Vorschlag kommt NACH allen anderen Sections
         """,
         tools=[],
         reset_tool_choice=True,
+        handoff_description="""
+            Transformiert technische Analyseergebnisse in benutzerfreundliche Business-Reports.
+            
+            Leite zu diesem Agent weiter für:
+            - Aufbereitung umfangreicher Analyseergebnisse
+            - Executive Summaries und Management-Reports
+            - Strukturierte Präsentation mit Handlungsempfehlungen
+            - Benutzerfreundliche Darstellung komplexer Daten
+            
+            Nutze "Output Summarizer" wenn:
+            - Feedback Analysis Agent umfangreiche Ergebnisse liefert
+            - Business-orientierte Zusammenfassungen benötigt werden
+            - Handlungsempfehlungen abgeleitet werden sollen
+        """,
     )
