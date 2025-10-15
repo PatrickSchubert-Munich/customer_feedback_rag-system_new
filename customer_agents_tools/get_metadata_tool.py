@@ -216,6 +216,82 @@ def create_metadata_tool(collection):
 
         return "\n".join(lines)
 
+    @function_tool
+    def resolve_market_name(market_input: str) -> str:
+        """
+        Löst eine Market-Bezeichnung zu einem validen Market-Namen im Datensatz auf.
+        
+        Nutze dieses Tool, um User-Eingaben wie "DE", "Deutschland", "US" 
+        zu den korrekten Market-Namen im Datensatz zu mappen (z.B. "C1-DE", "C2-US").
+        
+        Args:
+            market_input: User-Eingabe für einen Markt (z.B. "DE", "Deutschland", "AT", "US")
+        
+        Returns:
+            str: Valider Market-Name aus dem Datensatz oder Fehlermeldung
+        
+        Beispiele:
+            "DE" → "C1-DE" (wenn C1-DE im Datensatz existiert)
+            "Deutschland" → "C1-DE"
+            "US" → "C2-US" (wenn C2-US im Datensatz existiert)
+            "XYZ" → "❌ Unbekannter Markt: XYZ. Verfügbar: C1-DE, C2-US, ..."
+        """
+        if "market" not in df_metadata.columns:
+            return "❌ Keine Marktdaten verfügbar."
+        
+        # Hole alle verfügbaren Märkte
+        available_markets = sorted(df_metadata["market"].dropna().unique())
+        
+        # Normalisiere Input
+        market_lower = market_input.lower().strip()
+        
+        # 1. Exakte Übereinstimmung (case-insensitive)
+        for market in available_markets:
+            if market.lower() == market_lower:
+                return market
+        
+        # 2. Partial Match: User sagt "DE", wir finden "C1-DE" oder "C2-DE"
+        matches = [m for m in available_markets if market_lower in m.lower()]
+        
+        if len(matches) == 1:
+            # Eindeutige Übereinstimmung
+            return matches[0]
+        elif len(matches) > 1:
+            # Mehrere Übereinstimmungen - wähle erste
+            return f"⚠️ Mehrere Märkte gefunden: {', '.join(matches)}. Nutze ersten: {matches[0]}"
+        
+        # 3. Länder-Namen Mapping
+        country_mapping = {
+            "deutschland": "DE",
+            "germany": "DE",
+            "österreich": "AT",
+            "oesterreich": "AT",
+            "austria": "AT",
+            "schweiz": "CH",
+            "switzerland": "CH",
+            "usa": "US",
+            "united states": "US",
+            "frankreich": "FR",
+            "france": "FR",
+            "italien": "IT",
+            "italy": "IT",
+            "spanien": "ES",
+            "spain": "ES",
+        }
+        
+        # Versuche Länder-Namen zu mappen
+        if market_lower in country_mapping:
+            country_code = country_mapping[market_lower]
+            # Suche nach Märkten mit diesem Länder-Code
+            matches = [m for m in available_markets if country_code.lower() in m.lower()]
+            if len(matches) == 1:
+                return matches[0]
+            elif len(matches) > 1:
+                return f"⚠️ Mehrere Märkte für {market_input}: {', '.join(matches)}. Nutze ersten: {matches[0]}"
+        
+        # 4. Keine Übereinstimmung gefunden
+        return f"❌ Unbekannter Markt: '{market_input}'. Verfügbare Märkte: {', '.join(available_markets)}"
+
     # Return dictionary of all available tools
     return {
         "get_unique_markets": get_unique_markets,
@@ -224,4 +300,5 @@ def create_metadata_tool(collection):
         "get_date_range": get_date_range,
         "get_verbatim_statistics": get_verbatim_statistics,
         "get_dataset_overview": get_dataset_overview,
+        "resolve_market_name": resolve_market_name,
     }
