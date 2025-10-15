@@ -31,6 +31,21 @@ class QueryType(str, Enum):
     GENERAL_INQUIRY = "general_inquiry"
 
 
+class ChartType(str, Enum):
+    """Verfügbare Chart-Typen"""
+    
+    SENTIMENT_BAR_CHART = "sentiment_bar_chart"  # Bar Chart für Sentiment
+    SENTIMENT_PIE_CHART = "sentiment_pie_chart"  # Pie Chart für Sentiment
+    NPS_BAR_CHART = "nps_bar_chart"  # Bar Chart für NPS
+    NPS_PIE_CHART = "nps_pie_chart"  # Pie Chart für NPS
+    MARKET_BAR_CHART = "market_bar_chart"  # Bar Chart für Market-Volumen
+    MARKET_PIE_CHART = "market_pie_chart"  # Pie Chart für Market-Anteile
+    MARKET_SENTIMENT_BREAKDOWN = "market_sentiment_breakdown"  # Sentiment pro Markt
+    MARKET_NPS_BREAKDOWN = "market_nps_breakdown"  # NPS pro Markt
+    TIME_ANALYSIS = "time_analysis"
+    OVERVIEW = "overview"
+
+
 class QueryIntent(BaseModel):
     """Analysierte Benutzerabsicht"""
 
