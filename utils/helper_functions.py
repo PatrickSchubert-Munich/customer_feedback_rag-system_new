@@ -45,8 +45,8 @@ def get_model_name(model_type: str = "gpt4o") -> str:
         else:
             return "gpt-4o-mini"  # Fallback
 
-from clean_csv_file import CSVloader
-from prepare_customer_data import PrepareCustomerData
+from utils.clean_csv_file import CSVloader
+from utils.prepare_customer_data import PrepareCustomerData
 from db.vectorstore_chroma import ChromaVectorStore
 from test.test_questions import TestQuestions
 
