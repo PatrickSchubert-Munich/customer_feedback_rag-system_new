@@ -42,12 +42,27 @@ class CSVloader:
 
     @staticmethod
     def to_iso_format(date_string: str) -> str:
-        """Konvertiert Spalte Date in ISO 8601 Format: 2022-09-09T00:00:00Z."""
-        date_string = "2022-09-09 00:00:00"
-        dt = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
-        dt_utc = dt.replace(tzinfo=timezone.utc)
-        iso_format = dt_utc.isoformat()
-        return iso_format
+        """Konvertiert Date String in ISO 8601 Format mit UTC-Timezone.
+        
+        Args:
+            date_string: Date string from CSV (Format: "YYYY-MM-DD HH:MM:SS" oder ISO)
+        
+        Returns:
+            ISO 8601 formatted date string with UTC timezone
+        """
+        try:
+            # Versuche direktes ISO-Format-Parsing (für synthetische Daten)
+            if 'T' in date_string and ('+' in date_string or 'Z' in date_string):
+                # Bereits im ISO-Format
+                return date_string.strip()
+            
+            # Parse standard date format (für Original-Daten)
+            dt = datetime.strptime(date_string.strip(), "%Y-%m-%d %H:%M:%S")
+            dt_utc = dt.replace(tzinfo=timezone.utc)
+            return dt_utc.isoformat()
+        except Exception:
+            # Fallback: Aktuelles Datum bei Parsing-Fehler
+            return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
     def remove_null_values(df: pd.DataFrame) -> pd.DataFrame:
