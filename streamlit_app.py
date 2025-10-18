@@ -5,9 +5,7 @@ Identical functionality to app.py with clean main() structure.
 """
 
 import streamlit as st
-import asyncio
 import os
-import time
 from agents import SQLiteSession
 from dotenv import load_dotenv
 
@@ -15,14 +13,14 @@ from utils.helper_functions import (
     is_azure_openai,
     check_vectorstore_exists,
     extract_chart_path,
-    process_query,
-    initialize_system,
+    process_query_streamed,  # ✅ Echtes Token-Streaming
+    initialize_system
 )
 
 # Import test questions for example queries
 from test.test_questions import TestQuestions
 
-# Import our simple history manager
+# Import our simple history manager (for UI display)
 from utils.simple_history import SimpleConversationHistory
 
 # Import modular style components
@@ -32,12 +30,24 @@ from streamlit_styles.layout_styles import apply_main_layout_styles
 
 load_dotenv()
 
-# Configuration - identical to app.py
-FILE_PATH_CSV = "./data/feedback_data.csv"
-# FILE_PATH_CSV = f"{FILE_PATH_CSV_RAW.split(".csv")[0]}_enhanced.csv"
+# ============================================================================
+# DATA SOURCE CONFIGURATION
+# ============================================================================
+# Flag to choose between synthetic or original data
+USE_SYNTHETIC_DATA = True  # Set to False to use original data (feedback_data.csv)
+
+# File paths
+FILE_PATH_SYNTHETIC = "./data/feedback_synthetic.csv"
+FILE_PATH_ORIGINAL = "./data/feedback_data.csv"
+
+# Determine active CSV path based on flag
+FILE_PATH_CSV = FILE_PATH_SYNTHETIC if USE_SYNTHETIC_DATA else FILE_PATH_ORIGINAL
+
+# VectorStore Configuration
 VECTORSTORE_TYPE = "chroma"
 VECTORSTORE_PATH = "./chroma"
 VECTORSTORE_COLLECTION_NAME = "feedback_data"
+CREATE_NEW_STORE = False
 
 # AZURE OPENAI OR OPENAI - Automatische Erkennung basierend auf Umgebungsvariablen
 IS_AZURE_OPENAI = is_azure_openai()
@@ -125,23 +135,33 @@ def render_chart(chart_path: str, size: str = "Mittel") -> None:
         st.error(f"❌ Fehler beim Anzeigen: {e}")
 
 
-def stream_response(response: str, delay: float = 0.05):
+async def stream_agent_response(customer_manager, user_input: str, session, history_limit: int):
     """
-    Streamt Text wortweise für natürliche Anzeige mit Streamlit.
+    Async generator für echtes Token-Streaming vom Agent.
+    Streamlit konvertiert async generator automatisch zu sync!
     
     Args:
-        response: Der zu streamende Text
-        delay: Delay zwischen Wörtern in Sekunden (schneller für bessere UX)
+        customer_manager: Customer Manager Agent
+        user_input: Benutzer-Eingabe
+        session: SQLiteSession
+        history_limit: Historie-Limit
+    
+    Yields:
+        str: Tokens für Streamlit
     """
-    for word in response.split():
-        yield word + " "
-        time.sleep(delay)
+    async for chunk in process_query_streamed(customer_manager, user_input, session, history_limit):
+        if isinstance(chunk, str):
+            # Token-by-Token Text - wird direkt gestreamt
+            yield chunk
+        elif isinstance(chunk, dict):
+            # Final result oder Error - speichere für späteren Zugriff
+            st.session_state._streaming_final_result = chunk
 
 
 def process_user_query(user_input: str) -> None:
     """
-    Verarbeitet eine Benutzereingabe mit gestreamter Antwort.
-    Flow: Zeige Frage → Zeige "Thinking..." → Streame Antwort → Speichere in History
+    Verarbeitet eine Benutzereingabe mit ECHTEM Token-Streaming.
+    Flow: Zeige Frage → Zeige "Thinking..." → Stream Tokens → Speichere in History
     """
     # Ensure session is initialized
     session = ensure_session_initialized()
@@ -150,46 +170,39 @@ def process_user_query(user_input: str) -> None:
     with st.chat_message("user", avatar="🧑"):
         st.write(user_input)
 
-    # 2. Zeige "Thinking..." Placeholder
+    # 2. Zeige "Thinking..." und streame Response
     with st.chat_message("assistant", avatar="🧠"):
         placeholder = st.empty()
-        placeholder.markdown("Thinking...")
+        placeholder.markdown("_Thinking..._")
         
-        # Backend-Verarbeitung (process_query aus helper_functions)
-        response = asyncio.run(
-            process_query(
-                st.session_state.customer_manager, 
-                user_input, 
+        # ✅ ECHTES Token-Streaming von OpenAI API
+        streamed_text = placeholder.write_stream(
+            stream_agent_response(
+                st.session_state.customer_manager,
+                user_input,
                 session,
-                history_limit=HISTORY_LIMIT
+                HISTORY_LIMIT
             )
         )
         
-        # Handle both success and error cases
-        agent_name_str = "Assistant"  # Default fallback
+        # Nach Streaming: Hole Final Result
+        final_result = st.session_state.get('_streaming_final_result', None)
         
-        if isinstance(response, dict) and "error" in response:
+        if final_result and final_result.get("type") == "error":
             # Handle error case
-            error_message = f"**ERROR ({response.get('error_type', 'Unknown')}):** {response['error']}"
+            error_message = f"**ERROR ({final_result.get('error_type', 'Unknown')}):** {final_result['error']}"
             placeholder.error(error_message)
             response_content = error_message
-        else:
-            # Handle success case - result has final_output attribute
-            raw_response = str(response.final_output) # type: ignore
-            
-            # ✅ Agent-Tracking: Extrahiere Agent-Namen aus Response
-            agent_name = getattr(response, 'agent', None)
-            if agent_name and hasattr(agent_name, 'name'):
-                agent_name_str = agent_name.name
+            agent_name_str = "Assistant"
+        elif final_result:
+            # Handle success case
+            raw_response = final_result.get('final_output', streamed_text)
+            agent_name_str = final_result.get('agent_name', 'Assistant')
             
             # ✅ Chart-Erkennung: Extrahiere Chart-Pfad falls vorhanden
             text_content, chart_path = extract_chart_path(raw_response)
-        
-            # Stream response to user (visual effect only)
-            placeholder.write_stream(stream_response(text_content))
             
-            # Clear placeholder and replace with properly formatted Markdown
-            # This ensures correct rendering of headers (##), bold text (**), lists, etc.
+            # Update display mit korrekt formatiertem Markdown (falls Streaming rohen Text hatte)
             placeholder.empty()
             placeholder.markdown(text_content)
             
@@ -199,8 +212,15 @@ def process_user_query(user_input: str) -> None:
                 render_chart(chart_path, size=chart_size)
             
             # ✅ WICHTIG: Speichere RAW response MIT Chart-Marker für History
-            # Damit Charts auch beim Neuladen der History angezeigt werden
             response_content = raw_response
+        else:
+            # Fallback (sollte nicht vorkommen)
+            response_content = streamed_text
+            agent_name_str = "Assistant"
+        
+        # Cleanup temporary state
+        if '_streaming_final_result' in st.session_state:
+            del st.session_state._streaming_final_result
         
         # ✅ Add to conversation history with actual agent name
         st.session_state.conversation.add_interaction(
@@ -210,20 +230,25 @@ def process_user_query(user_input: str) -> None:
 
 
 @st.cache_resource(show_spinner=False)
-def initialize_system_cached(is_azure_openai: bool=False):
+def initialize_system_cached(is_azure_openai: bool=False, csv_path: str=FILE_PATH_CSV, is_synthetic: bool=False):
     """
     Streamlit-Wrapper für initialize_system mit Caching.
     Ruft die Business-Logic aus helper_functions auf und fügt UI-spezifische Validierung hinzu.
+    
+    Args:
+        is_azure_openai: True = Azure OpenAI, False = Standard OpenAI
+        csv_path: Pfad zur CSV-Datei (Default: FILE_PATH_CSV)
+        is_synthetic: True = Synthetische Daten, False = Original-Daten
     """
     try:
         # Rufe die core Business-Logic auf (aus helper_functions)
         customer_manager, collection = initialize_system(
             is_azure_openai=is_azure_openai,
-            csv_path=FILE_PATH_CSV,
-            write_enhanced_csv=True,
+            csv_path=csv_path,
             vectorstore_type=VECTORSTORE_TYPE,
-            create_new_store=False,
-            embedding_model="text-embedding-ada-002"
+            create_new_store=CREATE_NEW_STORE,
+            embedding_model="text-embedding-ada-002",
+            is_synthetic_data=is_synthetic
         )
         
         return customer_manager, collection
@@ -277,51 +302,71 @@ def main():
             st.rerun()
 
     st.divider()
-
+    
     # ============================================================================
     # SESSION STATE INITIALIZATION
     # ============================================================================
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = SimpleConversationHistory()
+    
+    # Ensure SQLiteSession is initialized (in-memory) for agents
+    ensure_session_initialized()
 
     if "system_initialized" not in st.session_state:
         st.session_state.system_initialized = False
     
     # System-Initialisierung nur beim ersten Mal durchführen
     if not st.session_state.system_initialized:
-        # Prüfe ob VectorStore existiert für passende Status-Nachricht
-        vectorstore_exists, doc_count = check_vectorstore_exists(
+        # Prüfe VectorStore Status
+        vectorstore_exists, vectorstore_count = check_vectorstore_exists(
             vectorstore_path=VECTORSTORE_PATH,
             collection_name=VECTORSTORE_COLLECTION_NAME
         )
         
-        if vectorstore_exists and doc_count > 0:
-            # VectorStore existiert bereits
-            with st.spinner("🔄 Initializing RAG system..."):
+        # Bestimme ob VectorStore neu erstellt werden muss
+        create_new_vectorstore = not vectorstore_exists or vectorstore_count == 0
+        
+        if create_new_vectorstore:
+            # VectorStore muss (neu) erstellt werden
+            data_source = "synthetischen" if USE_SYNTHETIC_DATA else "originalen"
+            with st.spinner(f"🔨 Erstelle VectorStore mit {data_source} Daten... Dies kann einige Minuten dauern..."):
                 try:
-                    customer_manager, collection = initialize_system_cached(is_azure_openai=IS_AZURE_OPENAI)
+                    customer_manager, collection = initialize_system(
+                        is_azure_openai=IS_AZURE_OPENAI,
+                        csv_path=FILE_PATH_CSV,
+                        vectorstore_type=VECTORSTORE_TYPE,
+                        create_new_store=True,
+                        embedding_model="text-embedding-ada-002",
+                        is_synthetic_data=USE_SYNTHETIC_DATA 
+                    )
                     st.session_state.customer_manager = customer_manager
                     st.session_state.collection = collection
                     st.session_state.system_initialized = True
-                    st.success(f"✅ System initialized with {collection.count():,} documents in vectorstore")
+                    st.success(f"✅ VectorStore erfolgreich erstellt mit {collection.count():,} Dokumenten!")
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Failed to initialize system: {e}")
+                    st.error(f"❌ Fehler beim Erstellen des VectorStore: {e}")
                     st.stop()
         else:
-            # VectorStore muss erstellt werden
-            with st.spinner("🔨 VectorStore will be created new. Please wait a little bit - this may take a few minutes..."):
+            # VectorStore existiert bereits - nutze gecachte Version
+            with st.spinner("🔄 Initialisiere RAG-System..."):
                 try:
-                    customer_manager, collection = initialize_system_cached(is_azure_openai=IS_AZURE_OPENAI)
+                    customer_manager, collection = initialize_system_cached(
+                        is_azure_openai=IS_AZURE_OPENAI,
+                        csv_path=FILE_PATH_CSV,
+                        is_synthetic=USE_SYNTHETIC_DATA  # ✅ FLAG übergeben
+                    )
                     st.session_state.customer_manager = customer_manager
                     st.session_state.collection = collection
                     st.session_state.system_initialized = True
-                    st.success(f"✅ VectorStore created successfully with {collection.count():,} documents!")
+                    
+                    data_source = "synthetischen" if USE_SYNTHETIC_DATA else "originalen"
+                    st.success(f"✅ System initialisiert mit {collection.count():,} Dokumenten aus {data_source} Daten")
                 except Exception as e:
-                    st.error(f"❌ Failed to create VectorStore: {e}")
+                    st.error(f"❌ Fehler bei System-Initialisierung: {e}")
                     st.stop()
-
-    # ============================================================================
+    
     # SIDEBAR - Settings and Statistics
     # ============================================================================
 
@@ -331,10 +376,10 @@ def main():
 
         # Use globally defined example queries from configuration section
         for query in EXAMPLE_QUERIES:
-            if st.button(query, key=f"sidebar_{query}", use_container_width=True):
-                # Store query to be processed outside sidebar (in main area)
-                st.session_state.pending_example_query = query
-                st.rerun()
+            # ✅ FIXED: Direkter callback statt pending state (verhindert Race Condition)
+            if st.button(query, key=f"sidebar_{query}", use_container_width=True, 
+                        on_click=process_user_query, args=(query,)):
+                pass  # Callback wird automatisch ausgeführt
 
         st.divider()
         
@@ -431,11 +476,7 @@ def main():
 # CHAT INPUT AT BOTTOM - Fixed position
 # ============================================================================
 
-    # Check for pending example query from sidebar (must be processed in main area)
-    if "pending_example_query" in st.session_state:
-        query = st.session_state.pending_example_query
-        del st.session_state.pending_example_query
-        process_user_query(query)
+    # ✅ FIXED: Kein pending_example_query mehr - direkter callback verhindert Race Condition
 
     # User input at the bottom of the page
     user_input = st.chat_input("Ask about customer feedback...")
