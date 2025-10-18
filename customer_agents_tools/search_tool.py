@@ -1,7 +1,7 @@
 from agents import function_tool
 
 
-class RobustSearchToolFactory:
+class SearchToolFactory:
     """Verbesserte Search Tool Factory mit erweiterten Error Handling für LLM Feedback"""
 
     # Confidence Thresholds für Semantic Search Quality (optimiert für Ada-002)
