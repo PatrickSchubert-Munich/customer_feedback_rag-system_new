@@ -5,13 +5,32 @@ from datetime import datetime, timezone
 
 class CSVloader:
     """
-    Lädt und bereinigt eine CSV-Datei mit Feedback-Daten.
-    Erwartete Spalten: NPS, Market, Date, Verbatim
+    Loads and cleans a CSV file containing feedback data.
+    
+    Expected columns: NPS, Market, Date, Verbatim
+    
+    Features:
+        - BOM removal from UTF-8 files
+        - Quote and semicolon cleanup
+        - Date format normalization to ISO 8601
+        - Null value filtering
+        
+    Notes:
+        - Handles both standard and ISO date formats
+        - Automatically removes rows/columns with null values
+        - Uses custom cleaning pattern for CSV parsing
     """
 
     def __init__(self, path, encoding) -> None:
         """
-        Initialisiert den CSVloader mit dem Pfad zur CSV-Datei und der Kodierung.
+        Initializes the CSVloader with file path and encoding.
+
+        Args:
+            path (str): Path to the CSV file to load
+            encoding (str): File encoding (e.g., 'utf-8', 'latin-1')
+            
+        Returns:
+            None
         """
         self.path = path
         self.encoding = encoding
@@ -42,13 +61,21 @@ class CSVloader:
 
     @staticmethod
     def to_iso_format(date_string: str) -> str:
-        """Konvertiert Date String in ISO 8601 Format mit UTC-Timezone.
+        """
+        Converts date string to ISO 8601 format with UTC timezone.
         
         Args:
-            date_string: Date string from CSV (Format: "YYYY-MM-DD HH:MM:SS" oder ISO)
+            date_string (str): Date string from CSV in format:
+                             - "YYYY-MM-DD HH:MM:SS" (standard format)
+                             - ISO format with timezone (for synthetic data)
         
         Returns:
-            ISO 8601 formatted date string with UTC timezone
+            str: ISO 8601 formatted date string with UTC timezone
+            
+        Notes:
+            - Handles both standard and ISO formats automatically
+            - Falls back to current datetime on parsing errors
+            - Always returns UTC timezone
         """
         try:
             # Versuche direktes ISO-Format-Parsing (für synthetische Daten)
@@ -67,7 +94,18 @@ class CSVloader:
     @staticmethod
     def remove_null_values(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Entfernt Zeilen und Spalten mit Nullwerten aus dem DataFrame.
+        Removes rows and columns with null values from the DataFrame.
+
+        Args:
+            df (pd.DataFrame): Input DataFrame with potential null values
+
+        Returns:
+            pd.DataFrame: Cleaned DataFrame with nulls removed
+            
+        Notes:
+            - First removes columns with any null values (axis=1)
+            - Then removes rows with any null values (axis=0)
+            - Ensures clean data for downstream processing
         """
         df = df.dropna(axis=1)  # Entfernt Spalten mit Nullwerten
         df = df.dropna(axis=0)  # Entfernt Zeilen mit Nullwerten

@@ -1,6 +1,8 @@
 """
-Simple Conversation History Manager - Alternative zum komplexen SessionContext.
-Optimiert für Streamlit Integration und maximale Einfachheit.
+Simple Conversation History Manager - Alternative to complex SessionContext.
+
+Optimized for Streamlit integration and maximum simplicity.
+Provides lightweight conversation tracking with statistics and export capabilities.
 """
 
 from typing import List, Dict, Any, Optional
@@ -45,8 +47,21 @@ def count_tokens(text: str, model: str = "gpt-4o-mini") -> int:
 
 class SimpleConversationHistory:
     """
-    Einfache Conversation History für User-Agent Interactions.
-    Optimiert für Streamlit und eine einfache Nutzung.
+    Simple conversation history for user-agent interactions.
+    
+    Optimized for Streamlit and straightforward usage.
+    
+    Features:
+        - Lightweight interaction tracking
+        - Token counting with automatic fallback
+        - Session statistics and analytics
+        - Multiple export formats (JSON, text, markdown)
+        - Chart marker filtering for agent context
+        - Search capabilities
+        
+    Attributes:
+        history (List[Dict[str, Any]]): List of interaction entries
+        session_id (str): Unique session identifier (timestamp-based)
     """
 
     def __init__(self):
@@ -61,13 +76,21 @@ class SimpleConversationHistory:
         metadata: Optional[Dict[str, Any]] = None,
     ):
         """
-        Füge eine User-Agent Interaction zur History hinzu.
+        Adds a user-agent interaction to the history.
 
         Args:
-            user_input: Die Benutzereingabe
-            agent_response: Die Agent-Antwort
-            agent_name: Name des Agents (optional)
-            metadata: Zusätzliche Metadaten (optional)
+            user_input (str): The user's input/question
+            agent_response (str): The agent's response
+            agent_name (str): Name of the responding agent. Defaults to "Assistant"
+            metadata (Optional[Dict[str, Any]]): Additional metadata for the interaction
+
+        Returns:
+            None
+            
+        Notes:
+            - Automatically timestamps each interaction
+            - Ensures response is converted to string for UI display
+            - Metadata defaults to empty dict if not provided
         """
         entry = {
             "timestamp": datetime.now().isoformat(),
@@ -81,15 +104,25 @@ class SimpleConversationHistory:
 
     def get_history(self, last_n: Optional[int] = None, strip_charts: bool = False) -> List[Dict[str, Any]]:
         """
-        Hole die Conversation History.
+        Retrieves the conversation history.
 
         Args:
-            last_n: Nur die letzten N Einträge (None = alle)
-            strip_charts: Wenn True, entferne __CHART__ Marker aus Responses
-                         (nützlich für Agent-Kontext, um Tokens zu sparen)
+            last_n (Optional[int]): Only return the last N entries. None returns all entries
+            strip_charts (bool): If True, removes __CHART__ markers from responses.
+                               Useful for agent context to save tokens. Defaults to False
 
         Returns:
-            Liste der Conversation Entries
+            List[Dict[str, Any]]: List of conversation entries with keys:
+                - timestamp (str): ISO format timestamp
+                - user (str): User input
+                - agent (str): Agent name
+                - response (str): Agent response (with or without chart markers)
+                - metadata (dict): Additional metadata
+                
+        Notes:
+            - Returns copy of history to prevent accidental modifications
+            - Chart stripping uses regex pattern: __CHART__.*?__CHART__
+            - Useful for reducing token count in agent context
         """
         history = self.history[-last_n:] if last_n and last_n > 0 else self.history.copy()
         
@@ -109,38 +142,68 @@ class SimpleConversationHistory:
         return history
 
     def get_last_response(self) -> Optional[str]:
-        """Hole die letzte Agent-Response oder None."""
+        """
+        Retrieves the last agent response or None.
+
+        Returns:
+            Optional[str]: Last agent response text, or None if history is empty
+        """
         if self.history:
             return self.history[-1]["response"]
         return None
 
     def get_last_user_input(self) -> Optional[str]:
-        """Hole den letzten User-Input oder None."""
+        """
+        Retrieves the last user input or None.
+
+        Returns:
+            Optional[str]: Last user input text, or None if history is empty
+        """
         if self.history:
             return self.history[-1]["user"]
         return None
 
     def clear_history(self):
-        """Lösche die komplette History."""
+        """
+        Clears the complete history and resets session ID.
+
+        Returns:
+            None
+            
+        Notes:
+            - Removes all conversation entries
+            - Generates new session ID with current timestamp
+            - Useful for starting fresh conversations
+        """
         self.history.clear()
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     def get_conversation_count(self) -> int:
-        """Anzahl der Conversation Turns."""
+        """
+        Returns the number of conversation turns.
+
+        Returns:
+            int: Total number of interactions in history
+        """
         return len(self.history)
 
     def search_history(
         self, search_term: str, case_sensitive: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Einfache Suche in der History.
+        Simple search in conversation history.
 
         Args:
-            search_term: Suchbegriff
-            case_sensitive: Groß-/Kleinschreibung beachten
+            search_term (str): Search term to find
+            case_sensitive (bool): Whether to match case. Defaults to False
 
         Returns:
-            Liste der gefundenen Entries
+            List[Dict[str, Any]]: List of matching conversation entries
+            
+        Notes:
+            - Searches both user input and agent responses
+            - Case-insensitive by default
+            - Returns all entries containing the search term
         """
         if not case_sensitive:
             search_term = search_term.lower()
@@ -159,13 +222,21 @@ class SimpleConversationHistory:
 
     def export_history(self, format: str = "json") -> str:
         """
-        Exportiere History in verschiedenen Formaten.
+        Exports history in various formats.
 
         Args:
-            format: "json", "text", oder "markdown"
+            format (str): Export format - "json", "text", or "markdown". Defaults to "json"
 
         Returns:
-            Formatierte History als String
+            str: Formatted history as string
+            
+        Raises:
+            ValueError: If unsupported format is specified
+            
+        Notes:
+            - JSON: Pretty-printed with Unicode support
+            - Text: Simple numbered format with timestamps
+            - Markdown: Formatted with headers and bold labels
         """
         if format == "json":
             return json.dumps(self.history, indent=2, ensure_ascii=False)
@@ -190,7 +261,24 @@ class SimpleConversationHistory:
             raise ValueError(f"Unsupported format: {format}")
 
     def get_summary_stats(self) -> Dict[str, Any]:
-        """Einfache Session-Statistiken."""
+        """
+        Calculates simple session statistics.
+
+        Returns:
+            Dict[str, Any]: Statistics dictionary with keys:
+                - session_id (str): Session identifier
+                - total_interactions (int): Number of conversation turns
+                - agents_used (dict): Count of interactions per agent
+                - first_interaction (str): Timestamp of first interaction
+                - last_interaction (str): Timestamp of last interaction
+                - avg_user_input_length (int): Average user input tokens
+                - avg_response_length (int): Average response tokens
+                
+        Notes:
+            - Returns minimal stats if history is empty
+            - Token counts use tiktoken or character-based fallback
+            - Aggregates agent usage across all interactions
+        """
         if not self.history:
             return {"total_interactions": 0, "session_id": self.session_id}
 
@@ -225,8 +313,17 @@ _default_conversation = None
 
 def get_conversation_history() -> SimpleConversationHistory:
     """
-    Singleton pattern für eine Default-Conversation.
-    Kann in einfachen Anwendungen verwendet werden.
+    Singleton pattern for a default conversation instance.
+    
+    Can be used in simple applications for quick conversation tracking.
+
+    Returns:
+        SimpleConversationHistory: Global conversation history instance
+        
+    Notes:
+        - Creates instance on first call
+        - Returns same instance on subsequent calls
+        - Use reset_conversation() to clear and restart
     """
     global _default_conversation
     if _default_conversation is None:
@@ -235,19 +332,57 @@ def get_conversation_history() -> SimpleConversationHistory:
 
 
 def reset_conversation():
-    """Reset der Default-Conversation."""
+    """
+    Resets the default conversation.
+
+    Returns:
+        None
+        
+    Notes:
+        - Clears the global conversation instance
+        - Next call to get_conversation_history() creates new instance
+        - Useful for starting fresh sessions
+    """
     global _default_conversation
     _default_conversation = None
 
 
 # Convenience functions für noch einfachere Usage
 def add_chat(user_input: str, agent_response: str, agent_name: str = "Assistant"):
-    """Convenience function - füge Chat zur default conversation hinzu."""
+    """
+    Convenience function - adds chat to default conversation.
+
+    Args:
+        user_input (str): User's input message
+        agent_response (str): Agent's response message
+        agent_name (str): Name of the agent. Defaults to "Assistant"
+
+    Returns:
+        None
+        
+    Notes:
+        - Uses global conversation instance
+        - Automatically creates instance if needed
+        - Simplified API for basic use cases
+    """
     conversation = get_conversation_history()
     conversation.add_interaction(user_input, agent_response, agent_name)
 
 
 def get_chat_history(last_n: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Convenience function - hole Chat History."""
+    """
+    Convenience function - retrieves chat history.
+
+    Args:
+        last_n (Optional[int]): Number of last entries to return. None returns all
+
+    Returns:
+        List[Dict[str, Any]]: List of conversation entries
+        
+    Notes:
+        - Uses global conversation instance
+        - Wrapper around get_conversation_history().get_history()
+        - Simplified API for basic use cases
+    """
     conversation = get_conversation_history()
     return conversation.get_history(last_n)

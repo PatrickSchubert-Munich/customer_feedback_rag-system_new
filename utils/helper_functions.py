@@ -6,8 +6,7 @@ from agents import (
     set_default_openai_api,
     set_tracing_disabled,
     Runner,
-    trace,
-    ItemHelpers,
+    trace
 )
 from openai.types.responses import ResponseTextDeltaEvent
 from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAIError
@@ -24,7 +23,19 @@ from datetime import datetime
 
 
 def is_azure_openai() -> bool:
-    """Prüft ob Azure OpenAI konfiguriert ist basierend auf Umgebungsvariablen"""
+    """
+    Checks if Azure OpenAI is configured based on environment variables.
+
+    Returns:
+        bool: True if all required Azure OpenAI environment variables are set:
+             - AZURE_OPENAI_API_KEY
+             - AZURE_OPENAI_ENDPOINT  
+             - AZURE_OPENAI_API_VERSION
+             
+    Notes:
+        - Used to determine which OpenAI client to instantiate
+        - Falls back to standard OpenAI if any variable is missing
+    """
     return bool(
         os.environ.get("AZURE_OPENAI_API_KEY") and 
         os.environ.get("AZURE_OPENAI_ENDPOINT") and 
@@ -37,31 +48,36 @@ def check_vectorstore_exists(
     collection_name: str = "feedback_data"
 ) -> tuple[bool, int]:
     """
-    Prüft ob VectorStore existiert und gibt Anzahl der Dokumente zurück.
+    Checks if VectorStore exists and returns document count.
     
     Args:
-        vectorstore_path: Pfad zum VectorStore-Verzeichnis
-        collection_name: Name der ChromaDB-Collection
+        vectorstore_path (str): Path to VectorStore directory. Defaults to "./chroma"
+        collection_name (str): Name of the ChromaDB collection. Defaults to "feedback_data"
     
     Returns:
-        tuple[bool, int]: (exists, document_count)
-            - exists: True wenn VectorStore existiert
-            - document_count: Anzahl der Dokumente im VectorStore (0 wenn nicht existiert)
+        tuple[bool, int]: (exists, document_count) where:
+            - exists (bool): True if VectorStore exists, False otherwise
+            - document_count (int): Number of documents in VectorStore (0 if doesn't exist)
+            
+    Notes:
+        - ChromaDB client must point to feedback_vectorstore subdirectory
+        - Collections are located in ./chroma/feedback_vectorstore, not ./chroma
+        - Returns (False, 0) on any errors during checking
     """
     try:
-        # Prüfe ob Verzeichnis existiert
+        # Check if directory exists
         vectorstore_full_path = os.path.join(vectorstore_path, "feedback_vectorstore")
         if not os.path.exists(vectorstore_full_path):
             return (False, 0)
         
-        # ✅ FIX: ChromaDB Client muss auf den feedback_vectorstore Pfad zeigen!
-        # Die Collections liegen in ./chroma/feedback_vectorstore, nicht in ./chroma
+        # ChromaDB client must point to feedback_vectorstore path
+        # Collections are located in ./chroma/feedback_vectorstore, not ./chroma
         client = chromadb.PersistentClient(path=vectorstore_full_path)
         collections = client.list_collections()
         
         for collection in collections:
             if collection.name == collection_name:
-                # Collection existiert - hole Anzahl der Dokumente
+                # Collection exists - retrieve document count
                 try:
                     coll = client.get_collection(name=collection_name)
                     doc_count = coll.count()
@@ -69,23 +85,32 @@ def check_vectorstore_exists(
                 except Exception:
                     return (False, 0)
         
-        # Collection nicht gefunden
+        # Collection not found
         return (False, 0)
         
     except Exception as e:
-        print(f"⚠️ Fehler beim Prüfen des VectorStore: {e}")
+        print(f"⚠️ Error checking VectorStore: {e}")
         return (False, 0)
 
 
 def get_model_name(model_type: str = "gpt4o") -> str:
     """
-    Gibt den korrekten Modellnamen basierend auf Azure/OpenAI Konfiguration zurück
+    Returns the correct model name based on Azure/OpenAI configuration.
     
     Args:
-        model_type: "gpt4o" für GPT-4 Omni oder "gpt4o_mini" für GPT-4 Omni Mini
+        model_type (str): Model type identifier:
+                         - "gpt4o" for GPT-4 Omni
+                         - "gpt4o_mini" for GPT-4 Omni Mini
+                         Defaults to "gpt4o"
     
     Returns:
-        str: Korrekter Modellname für Azure OpenAI oder Standard OpenAI
+        str: Correct model name for Azure OpenAI deployment or standard OpenAI API
+        
+    Notes:
+        - Azure OpenAI: Returns deployment names ("gpt-4o", "gpt-4o-mini")
+        - Standard OpenAI: Returns API model names (same format)
+        - Falls back to "gpt-4o-mini" for unknown model types
+        - Uses is_azure_openai() to determine environment
     """
     if is_azure_openai():
         # Azure OpenAI Deployment-Namen (wie sie aktuell verwendet werden)
@@ -113,28 +138,34 @@ def load_csv(
     synthetic_end_date: str=datetime.now().strftime('%Y-%m-%d'),
 ) -> pd.DataFrame:
     """
-    Lädt CSV-Datei mit optionalem Enhancement.
+    Loads CSV file with optional enhancement.
     
-    Zwei Modi:
-    1. is_synthetic=True: Lädt synthetische Daten (bereits enhanced)
-       - Kein PrepareCustomerData (spart ~50 Sekunden)
-       - Nutzt pandas direkt (schnell)
-       - Generiert automatisch neue Daten wenn Datei nicht existiert
+    Two modes:
+    1. is_synthetic=True: Loads synthetic data (already enhanced)
+       - No PrepareCustomerData needed (saves ~50 seconds)
+       - Uses pandas directly (fast)
+       - Automatically generates new data if file doesn't exist
        
-    2. is_synthetic=False: Lädt Original-Daten (braucht Enhancement)
-       - Volle Enhancement-Pipeline
-       - NPS-Kategorisierung, Sentiment-Analyse, Topic-Klassifizierung
-       - Speichert enhanced CSV automatisch lokal
+    2. is_synthetic=False: Loads original data (requires enhancement)
+       - Full enhancement pipeline
+       - NPS categorization, sentiment analysis, topic classification
+       - Automatically saves enhanced CSV locally
     
     Args:
-        path: Pfad zur CSV-Datei (Standard: "./data/feedback_data.csv")
-        is_synthetic: True = Synthetische Daten (kein Enhancement nötig)
-        n_synthetic_samples: Anzahl synthetischer Datensätze (nur bei is_synthetic=True)
-        synthetic_start_date: Start-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
-        synthetic_end_date: End-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
+        path (str): Path to CSV file. Defaults to "./data/feedback_data.csv"
+        is_synthetic (bool): True = synthetic data (no enhancement needed). Defaults to False
+        n_synthetic_samples (int): Number of synthetic records (only if is_synthetic=True). Defaults to 10000
+        synthetic_start_date (str): Start date for synthetic data (format: 'YYYY-MM-DD'). Defaults to '2023-01-01'
+        synthetic_end_date (str): End date for synthetic data (format: 'YYYY-MM-DD'). Defaults to today
     
     Returns:
-        DataFrame (enhanced oder bereits fertig)
+        pd.DataFrame: Enhanced or ready-to-use DataFrame with all required columns
+        
+    Notes:
+        - Synthetic mode skips PrepareCustomerData (~50s time saving)
+        - Original mode runs full NPS/sentiment/topic pipeline
+        - Automatically generates synthetic data if file missing
+        - Enhanced CSV is saved for future use
     """
     # Synthetische Daten laden
     if is_synthetic:
@@ -188,11 +219,14 @@ def write_prepared_csv(
     data: pd.DataFrame, path: str = "./data/feedback_data_enhanced.csv"
 ) -> None:
     """
-    Speichert enhanced DataFrame als CSV-Datei.
+    Saves enhanced DataFrame as CSV file.
     
     Args:
-        data: Enhanced DataFrame
-        path: Ziel-Pfad für CSV-Datei
+        data (pd.DataFrame): Enhanced DataFrame to be saved
+        path (str): Target path for CSV file. Defaults to "./data/feedback_data_enhanced.csv"
+    
+    Returns:
+        None
     """
     data.to_csv(path, index=False, encoding="utf-8", mode="w")
     print(f"Enhanced CSV written to {path}")
@@ -202,22 +236,22 @@ def load_vectorstore(
     data: pd.DataFrame, 
     type: str = "chroma", 
     create_new_store: bool = False,
-    embedding_model: str = "text-embedding-ada-002"  # ✅ KORRIGIERT: Ada-002 als Default
+    embedding_model: str = "text-embedding-ada-002"
 ) -> Any | None:
     """
-    Lädt oder erstellt einen VectorStore.
+    Loads or creates a VectorStore.
     
     Args:
-        data: DataFrame mit Customer-Feedback-Daten
-        type: VectorStore-Typ (aktuell nur "chroma" unterstützt)
-        create_new_store: True = VectorStore neu erstellen, False = existierenden laden
-        embedding_model: OpenAI Embedding-Modell (Default: "text-embedding-ada-002")
-            - "text-embedding-ada-002": Beste Cross-Lingual Performance (78.4% avg similarity)
-            - "text-embedding-3-small": Günstiger, aber schlechtere Cross-Lingual (29.4%)
-            - "text-embedding-3-large": Teurer, aber auch schlechte Cross-Lingual (32.2%)
+        data (pd.DataFrame): DataFrame containing customer feedback data
+        type (str): VectorStore type (currently only "chroma" is supported). Defaults to "chroma"
+        create_new_store (bool): If True, creates new VectorStore; if False, loads existing one. Defaults to False
+        embedding_model (str): OpenAI embedding model. Defaults to "text-embedding-ada-002"
+            - "text-embedding-ada-002": Best cross-lingual performance (78.4% avg similarity)
+            - "text-embedding-3-small": Cheaper but worse cross-lingual performance (29.4%)
+            - "text-embedding-3-large": More expensive but also poor cross-lingual performance (32.2%)
     
     Returns:
-        ChromaDB Collection oder None bei Fehler
+        Any | None: ChromaDB Collection object if successful, None on error
     """
     if type == "chroma":
         vectorstore_manager = ChromaVectorStore(
@@ -237,31 +271,31 @@ def load_vectorstore(
         if chroma_collection:
             print(f"VectorStore loaded with {chroma_collection.count()} documents")
 
-        # Prüfe ob Collection erfolgreich erstellt/geladen wurde
+        # Check if collection was successfully created/loaded
         if chroma_collection is None:
-            print("❌ FEHLER: VectorStore konnte nicht erstellt/geladen werden!")
+            print("❌ ERROR: VectorStore could not be created/loaded!")
             return None
         
         return chroma_collection
     
-    print(f"❌ FEHLER: Unbekannter VectorStore-Typ '{type}'. Have to be 'chroma' for now.")
+    print(f"❌ ERROR: Unknown VectorStore type '{type}'. Must be 'chroma' for now.")
     return None
 
 
 def get_azure_openai_client() -> AsyncAzureOpenAI | None:
     """
-    Initialisiert Azure OpenAI Client und setzt als Default für agents.
+    Initializes Azure OpenAI client and sets it as default for agents.
     
-    Benötigte Umgebungsvariablen:
-    - AZURE_OPENAI_API_KEY
-    - AZURE_OPENAI_ENDPOINT
-    - AZURE_OPENAI_API_VERSION
+    Required environment variables:
+        - AZURE_OPENAI_API_KEY
+        - AZURE_OPENAI_ENDPOINT
+        - AZURE_OPENAI_API_VERSION
     
     Returns:
-        AsyncAzureOpenAI Client oder None bei Fehler
+        AsyncAzureOpenAI | None: Initialized Azure OpenAI client or None on error
     
     Raises:
-        ValueError: Wenn erforderliche Umgebungsvariablen fehlen
+        ValueError: If required environment variables are not set
     """
     if not os.environ.get("AZURE_OPENAI_API_KEY", ""):
         raise ValueError("AZURE_OPENAI_API_KEY environment variable not set")
@@ -286,25 +320,25 @@ def get_azure_openai_client() -> AsyncAzureOpenAI | None:
         return azure_client
     except OpenAIError as e:
         print(f"OpenAI API Error: {str(e)}")
-        print("❌ FEHLER: Azure OpenAI Client konnte nicht initialisiert werden!")
+        print("❌ ERROR: Azure OpenAI Client could not be initialized!")
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
-        print("❌ FEHLER: Azure OpenAI Client konnte nicht initialisiert werden!")
+        print("❌ ERROR: Azure OpenAI Client could not be initialized!")
     return None
 
 
 def get_openai_client() -> AsyncOpenAI | None:
     """
-    Initialisiert Standard OpenAI Client.
+    Initializes standard OpenAI client.
     
-    Benötigte Umgebungsvariablen:
-    - OPENAI_API_KEY
+    Required environment variables:
+        - OPENAI_API_KEY
     
     Returns:
-        AsyncOpenAI Client oder None bei Fehler
+        AsyncOpenAI | None: Initialized OpenAI client or None on error
     
     Raises:
-        ValueError: Wenn OPENAI_API_KEY nicht gesetzt ist
+        ValueError: If OPENAI_API_KEY environment variable is not set
     """
     # Check required environment variables
     if not os.environ.get("OPENAI_API_KEY", ""):
@@ -316,10 +350,10 @@ def get_openai_client() -> AsyncOpenAI | None:
         return openai_client
     except OpenAIError as e:
         print(f"OpenAI API Error: {str(e)}")
-        print("❌ FEHLER: OpenAI Client konnte nicht initialisiert werden!")
+        print("❌ ERROR: OpenAI Client could not be initialized!")
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
-        print("❌ FEHLER: OpenAI Client konnte nicht initialisiert werden!")
+        print("❌ ERROR: OpenAI Client could not be initialized!")
     return None
 
 
@@ -334,20 +368,20 @@ def get_test_questions(
     questions_per_category: int = 2,
 ) -> list[str]:
     """
-    Generiert Testfragen basierend auf den übergebenen Flags.
+    Generates test questions based on provided flags.
 
     Args:
-        test_meta: Meta-Fragen (Datensatz-Informationen)
-        test_feedback: Feedback-Analysen
-        test_validation: Markt-Validierung
-        test_sentiment: Sentiment-Analysen
-        test_parameters: User-Parameter Extraktion
-        test_complex: Komplexe Multi-Kriterien Queries
-        test_edge: Edge Cases (standardmäßig deaktiviert)
-        questions_per_category: Anzahl Fragen pro aktivierter Kategorie
+        test_meta (bool): Include meta questions (dataset information). Defaults to True
+        test_feedback (bool): Include feedback analysis questions. Defaults to True
+        test_validation (bool): Include market validation questions. Defaults to True
+        test_sentiment (bool): Include sentiment analysis questions. Defaults to True
+        test_parameters (bool): Include user parameter extraction questions. Defaults to True
+        test_complex (bool): Include complex multi-criteria queries. Defaults to True
+        test_edge (bool): Include edge cases (disabled by default). Defaults to False
+        questions_per_category (int): Number of questions per enabled category. Defaults to 2
 
     Returns:
-        Liste der generierten Testfragen
+        list[str]: List of generated test questions
     """
     test_queries = []
 
@@ -442,36 +476,36 @@ def extract_chart_path(text: str) -> tuple[str, str | None]:
 
 def limit_session_history(session, max_history: int | None = None):
     """
-    Begrenzt die Session-Historie auf die letzten N Einträge.
-    WICHTIG: Entfernt __CHART__ Marker aus History für Agent-Kontext!
+    Limits session history to the last N entries.
+    IMPORTANT: Removes __CHART__ markers from history for agent context!
     
     Args:
-        session: SQLiteSession Objekt
-        max_history: Maximale Anzahl Historie-Einträge (None = unbegrenzt)
+        session (Any): SQLiteSession object containing conversation history
+        max_history (int | None): Maximum number of history entries (None = unlimited). Defaults to None
     
     Returns:
-        Session mit begrenzter Historie und bereinigten Responses
+        Any: Session with limited history and cleaned responses
     
-    Note:
-        - Chart-Marker werden entfernt um Token-Konsum zu optimieren
-        - Charts sind nur für UI relevant, nicht für Agent-Kontext
-        - Bei Fehler wird Original-Session zurückgegeben (Robustheit)
+    Notes:
+        - Chart markers are removed to optimize token consumption
+        - Charts are only relevant for UI, not for agent context
+        - Returns original session on error (robustness)
     """
     try:
-        # Hole aktuelle Historie
+        # Get current history
         history = session.get_history()
         
         if not history:
             return session
         
-        # ✅ CHART-BEREINIGUNG: Entferne __CHART__ Marker für Token-Optimierung
-        # Charts sind nur für UI relevant, nicht für Agent-Kontext!
+        # Clean chart markers for token optimization
+        # Charts are only relevant for UI, not for agent context
         cleaned_history = []
         for entry in history:
-            # Erstelle Kopie des Eintrags
+            # Create copy of entry
             cleaned_entry = entry.copy()
             
-            # Bereinige Response von Chart-Markern
+            # Clean response from chart markers
             if "content" in cleaned_entry:
                 content = cleaned_entry["content"]
                 if isinstance(content, list):
@@ -479,7 +513,7 @@ def limit_session_history(session, max_history: int | None = None):
                     cleaned_content = []
                     for part in content:
                         if isinstance(part, dict) and "text" in part:
-                            # Entferne __CHART__pfad__CHART__ Pattern
+                            # Remove __CHART__path__CHART__ pattern
                             cleaned_text = re.sub(r'__CHART__[^_]+__CHART__', '', part["text"])
                             part["text"] = cleaned_text.strip()
                         cleaned_content.append(part)
@@ -490,16 +524,16 @@ def limit_session_history(session, max_history: int | None = None):
             
             cleaned_history.append(cleaned_entry)
         
-        # Begrenze History falls nötig
+        # Limit history if necessary
         if max_history and len(cleaned_history) > max_history:
             cleaned_history = cleaned_history[-max_history:]
         
-        # Setze bereinigte History zurück
+        # Set cleaned history back
         session.set_history(cleaned_history)
             
     except (AttributeError, Exception) as e:
-        # Falls Session keine History-Methoden hat oder Fehler auftritt,
-        # gib Original zurück (Fallback für Robustheit)
+        # If session has no history methods or error occurs,
+        # return original (fallback for robustness)
         pass
     
     return session
@@ -507,28 +541,26 @@ def limit_session_history(session, max_history: int | None = None):
 
 async def process_query(customer_manager, user_input: str, session=None, history_limit: int | None = None):
     """
-    Verarbeitet User-Query mit Multi-Agent-System.
+    Processes user query with multi-agent system.
     
     Args:
-        customer_manager: Customer Manager Agent
-        user_input: Benutzer-Eingabe
-        session: SQLiteSession für Kontext-Verwaltung (optional)
-        history_limit: Maximale Anzahl Historie-Einträge (optional)
+        customer_manager (Any): Customer Manager Agent instance
+        user_input (str): User input query
+        session (Any | None): SQLiteSession for context management (optional). Defaults to None
+        history_limit (int | None): Maximum number of history entries (optional). Defaults to None
     
     Returns:
-        Result-Objekt mit agent.final_output Attribut oder Error-Dict
+        Any | dict: Result object with agent.final_output attribute or error dictionary
+            Error format: {"error": str, "error_type": str}
     
-    Error-Format:
-        {"error": str, "error_type": str}
-    
-    Note:
-        - Automatische Historie-Begrenzung für Token-Optimierung
-        - Tracing mit session_id für Debugging
-        - Robuste Error-Handling
+    Notes:
+        - Automatic history limitation for token optimization
+        - Tracing with session_id for debugging
+        - Robust error handling
     """
     try:
         if session:
-            # HISTORIE BEGRENZEN für Token-Optimierung
+            # Limit history for token optimization
             if history_limit is not None:
                 session = limit_session_history(session, history_limit)
 
@@ -555,26 +587,27 @@ async def process_query_streamed(
     history_limit: int | None = None
 ) -> AsyncGenerator[str | dict, None]:
     """
-    Verarbeitet User-Query mit ECHTEM Token-Streaming.
+    Processes user query with REAL token streaming.
     
     Args:
-        customer_manager: Customer Manager Agent
-        user_input: Benutzer-Eingabe
-        session: SQLiteSession für Kontext-Verwaltung (optional)
-        history_limit: Maximale Anzahl Historie-Einträge (optional)
+        customer_manager (Any): Customer Manager Agent instance
+        user_input (str): User input query
+        session (Any | None): SQLiteSession for context management (optional). Defaults to None
+        history_limit (int | None): Maximum number of history entries (optional). Defaults to None
     
     Yields:
-        str: Token-by-Token Text-Deltas
-        dict: Final result mit {"final_output": str, "agent_name": str} oder Error
+        str | dict: Token-by-token text deltas (str) or final result/error (dict)
+            Final result format: {"type": "final_result", "final_output": str, "agent_name": str, "full_text": str}
+            Error format: {"type": "error", "error": str, "error_type": str}
     
-    Note:
-        - Echtes Token-Streaming von OpenAI API
-        - Nutzt Runner.run_streamed() für Token-by-Token Ausgabe
-        - Kompatibel mit st.write_stream() in Streamlit
+    Notes:
+        - Real token streaming from OpenAI API
+        - Uses Runner.run_streamed() for token-by-token output
+        - Compatible with st.write_stream() in Streamlit
     """
     try:
         if session:
-            # HISTORIE BEGRENZEN für Token-Optimierung
+            # Limit history for token optimization
             if history_limit is not None:
                 session = limit_session_history(session, history_limit)
 
@@ -587,31 +620,31 @@ async def process_query_streamed(
             # Fallback without session
             result = Runner.run_streamed(customer_manager, user_input)
 
-        # Sammle vollständige Response für History
+        # Collect complete response for history
         full_text = []
         agent_name = None
         
         # Stream events
         async for event in result.stream_events():
-            # Token-by-Token Text-Deltas streamen
+            # Stream token-by-token text deltas
             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
                 token = event.data.delta
                 full_text.append(token)
-                yield token  # ✅ Echtes Token-Streaming!
+                yield token  # Real token streaming
             
-            # Agent-Tracking
+            # Agent tracking
             elif event.type == "agent_updated_stream_event":
                 agent_name = event.new_agent.name
         
-        # ✅ NACH Streaming: final_output ist jetzt verfügbar
-        # Verwende result.final_output falls vorhanden, sonst fallback zu full_text
+        # After streaming: final_output is now available
+        # Use result.final_output if available, otherwise fallback to full_text
         final_output = result.final_output if result.final_output is not None else "".join(full_text)
         
         yield {
             "type": "final_result",
             "final_output": final_output,
             "agent_name": agent_name or (result.last_agent.name if result.last_agent else 'Assistant'),
-            "full_text": "".join(full_text)  # Für Debugging/Vergleich
+            "full_text": "".join(full_text)  # For debugging/comparison
         }
 
     except Exception as e:
@@ -628,45 +661,43 @@ def initialize_system(
     csv_path: str = "./data/feedback_data.csv",
     vectorstore_type: str = "chroma",
     create_new_store: bool = False,
-    embedding_model: str = "text-embedding-ada-002",  # best Cross-Lingual results
-    is_synthetic_data: bool = False,  # Flag for synthetical data
+    embedding_model: str = "text-embedding-ada-002",
+    is_synthetic_data: bool = False,
     n_synthetic_samples: int = 10000,
     synthetic_start_date: str = '2023-01-01',
     synthetic_end_date: str = datetime.now().strftime('%Y-%m-%d')
 ):
     """
-    Initialisiert das RAG-System mit allen Komponenten.
+    Initializes the RAG system with all components.
     
     Args:
-        is_azure_openai: True = Azure OpenAI, False = Standard OpenAI
-        csv_path: Pfad zur CSV-Datei mit Feedback-Daten
-        vectorstore_type: Typ des VectorStore (aktuell nur "chroma")
-        create_new_store: True = VectorStore neu erstellen
-        embedding_model: OpenAI Embedding-Modell für VectorStore
-                        Default: text-embedding-ada-002 (beste Cross-Lingual Performance)
-                        Alternative: text-embedding-3-small, text-embedding-3-large
-            - "text-embedding-ada-002": Beste Cross-Lingual Performance (78.4%)
-            - "text-embedding-3-small" (Default): Günstiger, aber schwächer (29.4%)
-            - "text-embedding-3-large": Teurer, aber auch schwach (32.2%)
-        is_synthetic_data: True = Synthetische Daten (kein Enhancement), False = Original-Daten
-        n_synthetic_samples: Anzahl synthetischer Datensätze (nur bei is_synthetic_data=True)
-        synthetic_start_date: Start-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
-        synthetic_end_date: End-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
+        is_azure_openai (bool): If True uses Azure OpenAI, if False uses standard OpenAI. Defaults to False
+        csv_path (str): Path to CSV file with feedback data. Defaults to "./data/feedback_data.csv"
+        vectorstore_type (str): Type of VectorStore (currently only "chroma" supported). Defaults to "chroma"
+        create_new_store (bool): If True creates new VectorStore. Defaults to False
+        embedding_model (str): OpenAI embedding model for VectorStore. Defaults to "text-embedding-ada-002"
+            - "text-embedding-ada-002": Best cross-lingual performance (78.4%)
+            - "text-embedding-3-small": Cheaper but weaker cross-lingual (29.4%)
+            - "text-embedding-3-large": More expensive but also weak cross-lingual (32.2%)
+        is_synthetic_data (bool): If True uses synthetic data (no enhancement), if False uses original data. Defaults to False
+        n_synthetic_samples (int): Number of synthetic records (only if is_synthetic_data=True). Defaults to 10000
+        synthetic_start_date (str): Start date for synthetic data (format: 'YYYY-MM-DD'). Defaults to '2023-01-01'
+        synthetic_end_date (str): End date for synthetic data (format: 'YYYY-MM-DD'). Defaults to current date
     
     Returns:
-        tuple: (customer_manager, collection)
-            - customer_manager: Konfigurierter Customer Manager Agent
-            - collection: ChromaDB Collection
+        tuple[Any, Any]: (customer_manager, collection) where:
+            - customer_manager (Any): Configured Customer Manager Agent instance
+            - collection (Any): ChromaDB Collection instance
     
     Raises:
-        ValueError: Bei fehlenden API-Keys
-        FileNotFoundError: Wenn CSV nicht existiert
+        ValueError: If API keys are missing or VectorStore cannot be created
+        FileNotFoundError: If CSV file does not exist (for original data)
     
-    Note:
-        - Initialisiert OpenAI Client (Azure oder Standard)
-        - Lädt und enhanced CSV-Daten (automatisch gespeichert bei Original-Daten)
-        - Erstellt/lädt VectorStore mit gewähltem Embedding-Modell
-        - Konfiguriert Multi-Agent-System
+    Notes:
+        - Initializes OpenAI client (Azure or standard)
+        - Loads and enhances CSV data (automatically saved for original data)
+        - Creates/loads VectorStore with chosen embedding model
+        - Configures multi-agent system
     """
     # Import agent modules locally to avoid circular imports
     from customer_agents.chart_creator_agent import create_chart_creator_agent
@@ -681,15 +712,15 @@ def initialize_system(
     if is_azure_openai:
         azure_client = get_azure_openai_client()
         if azure_client is None:
-            raise ValueError("❌ Azure OpenAI Client konnte nicht initialisiert werden!")
+            raise ValueError("❌ Azure OpenAI Client could not be initialized!")
     else:
         openai_client = get_openai_client()
         if openai_client is None:
-            raise ValueError("❌ OpenAI Client konnte nicht initialisiert werden!")
+            raise ValueError("❌ OpenAI Client could not be initialized!")
     
     # Load and enhance CSV data (conditional based on data type)
     if not is_synthetic_data and not os.path.exists(csv_path):
-        raise FileNotFoundError(f"CSV-Datei nicht gefunden: {csv_path}")
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
         
     customer_data = load_csv(
         path=csv_path, 
@@ -704,20 +735,20 @@ def initialize_system(
         data=customer_data, 
         type=vectorstore_type, 
         create_new_store=create_new_store,
-        embedding_model=embedding_model  # ✅ Übergebenes Modell verwenden
+        embedding_model=embedding_model
     )
     
     if collection is None:
-        raise ValueError("❌ VectorStore konnte nicht erstellt/geladen werden!")
+        raise ValueError("❌ VectorStore could not be created/loaded!")
     
     if collection.count() == 0:
-        raise ValueError("❌ VectorStore ist leer - keine Dokumente wurden erstellt!")
+        raise ValueError("❌ VectorStore is empty - no documents were created!")
 
     # Create tools for agents
     search_customer_feedback = SearchToolFactory.create_search_tool(collection)
     build_metadata_snapshot = create_metadata_tool(collection)
     
-    # ✅ BUILD METADATA SNAPSHOT (Pre-compute all metadata for Customer Manager)
+    # Build metadata snapshot (pre-compute all metadata for Customer Manager)
     # This avoids repeated tool calls and embeds metadata directly in the agent instructions
     metadata_snapshot = build_metadata_snapshot()
 
@@ -735,7 +766,7 @@ def initialize_system(
         chart_creation_tool=create_chart_creation_tool(collection)
     )
 
-    # ✅ Customer Manager with embedded metadata snapshot (NO metadata_analysis_agent needed!)
+    # Customer Manager with embedded metadata snapshot (no metadata_analysis_agent needed)
     customer_manager = create_customer_manager_agent(
         metadata_snapshot=metadata_snapshot,  # Pre-computed metadata embedded in instructions
         handoff_agents=[

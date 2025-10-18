@@ -1,14 +1,14 @@
 """
-Advanced Synthetic Data Generator für Kundenfeedback - Enterprise Edition
-=========================================================================
+Advanced Synthetic Data Generator for Customer Feedback - Enterprise Edition
+=============================================================================
 
-Dieses erweiterte Modul erzeugt hochwertige synthetische Kundenfeedback-Daten mit:
-- Maximaler Diversität (Alter, Geschlecht, Bildung, Region)
-- Vollständiger Anonymisierung mit kreativen Fake-Namen
-- Realistischer Variation und Authentizität
-- Nahtloser Integration mit echten Daten
-- Bias-Vermeidung durch statistische Kontrollen
-- Skalierbar für tausende Datensätze
+This advanced module generates high-quality synthetic customer feedback data with:
+- Maximum diversity (age, gender, education, region)
+- Complete anonymization with creative fake names
+- Realistic variation and authenticity
+- Seamless integration with real data
+- Bias prevention through statistical controls
+- Scalable for thousands of records
 """
 
 import pandas as pd
@@ -26,7 +26,21 @@ warnings.filterwarnings('ignore')
 
 @dataclass
 class PersonaProfile:
-    """Definiert eine Kundenpers ona mit allen relevanten Eigenschaften"""
+    """
+    Defines a customer persona with all relevant characteristics.
+    
+    Attributes:
+        age_group (str): Age group of the persona
+        gender (str): Gender of the persona
+        education_level (str): Education level
+        tech_affinity (str): Technology affinity level
+        communication_style (str): Communication style preference
+        typical_concerns (List[str]): List of typical concerns
+        text_patterns (Dict[str, float]): Text pattern probabilities
+        typo_probability (float): Probability of typos
+        emoji_usage (float): Probability of emoji usage
+        formality_level (float): Formality level (0-1)
+    """
     age_group: str
     gender: str
     education_level: str
@@ -41,8 +55,11 @@ class PersonaProfile:
 
 class BiasMonitor:
     """
-    Überwacht und verhindert Bias während der Datengenerierung.
-    Limit: Keine Phrase/Topic darf mehr als 50x verwendet werden.
+    Monitors and prevents bias during data generation.
+    Limit: No phrase/topic should be used more than 50 times.
+    
+    Args:
+        max_repeats (int): Maximum number of times a phrase can be repeated. Defaults to 50
     """
     def __init__(self, max_repeats: int = 50):
         self.phrase_counter = defaultdict(int)
@@ -52,21 +69,43 @@ class BiasMonitor:
         self.max_repeats = max_repeats
         
     def track_phrase(self, phrase: str) -> bool:
-        """Prüft ob Phrase noch verwendet werden darf"""
+        """
+        Checks if a phrase can still be used.
+        
+        Args:
+            phrase (str): The phrase to check
+            
+        Returns:
+            bool: True if phrase can be used, False if limit reached
+        """
         if self.phrase_counter[phrase] >= self.max_repeats:
             return False  # Phrase zu oft verwendet
         self.phrase_counter[phrase] += 1
         return True
         
     def track_topic(self, topic: str) -> bool:
-        """Prüft Topic-Balance"""
+        """
+        Checks topic balance.
+        
+        Args:
+            topic (str): The topic to check
+            
+        Returns:
+            bool: True if topic can be used, False if limit reached
+        """
         if self.topic_counter[topic] >= self.max_repeats * 2:  # Topics dürfen öfter vorkommen
             return False
         self.topic_counter[topic] += 1
         return True
         
     def get_report(self) -> Dict:
-        """Gibt Bias-Report zurück"""
+        """
+        Returns a bias report.
+        
+        Returns:
+            Dict: Dictionary containing bias statistics including most used phrases,
+                  topic distribution, total phrases count, and warnings
+        """
         return {
             'most_used_phrases': sorted(self.phrase_counter.items(), key=lambda x: x[1], reverse=True)[:10],
             'topic_distribution': dict(self.topic_counter),
@@ -81,16 +120,23 @@ class BiasMonitor:
 
 class PhraseDiversifier:
     """
-    Ersetzt monotone Phrasen wie "customer states" (2.331x im Original!)
-    durch 100+ natürliche Variationen mit Usage-Tracking.
+    Replaces monotonous phrases like "customer states" (2,331x in original!)
+    with 100+ natural variations with usage tracking.
     """
     def __init__(self):
         self.usage_counter = defaultdict(int)
         
     def get_diverse_opening(self, sentiment: str, bias_monitor: BiasMonitor) -> str:
         """
-        Holt eine Opening-Phrase die NICHT overused ist.
-        Falls alle Optionen erschöpft, wähle die am wenigsten genutzte.
+        Gets an opening phrase that is NOT overused.
+        If all options are exhausted, chooses the least used one.
+        
+        Args:
+            sentiment (str): Sentiment type ('positiv', 'neutral', 'negativ')
+            bias_monitor (BiasMonitor): BiasMonitor instance for tracking usage
+            
+        Returns:
+            str: A diverse opening phrase
         """
         # Diese werden in _initialize_text_components() gesetzt
         # Hier nur Fallback für ältere Code-Pfade
@@ -117,8 +163,8 @@ class PhraseDiversifier:
 
 class NPSSentimentCorrelator:
     """
-    Stellt realistische Korrelation zwischen NPS und Sentiment her.
-    Basierend auf Analyse: Detractors (16.8%) meist negativ, Promoters (55.8%) meist positiv.
+    Establishes realistic correlation between NPS and sentiment.
+    Based on analysis: Detractors (16.8%) mostly negative, Promoters (55.8%) mostly positive.
     """
     def __init__(self):
         # Realistische Verteilungen aus Analyse
@@ -129,15 +175,23 @@ class NPSSentimentCorrelator:
         }
         
     def get_realistic_sentiment(self, nps_category: str) -> str:
-        """Gibt sentiment basierend auf NPS-Kategorie zurück"""
+        """
+        Returns sentiment based on NPS category.
+        
+        Args:
+            nps_category (str): NPS category ('Detractor', 'Passive', 'Promoter')
+            
+        Returns:
+            str: Sentiment label ('positiv', 'neutral', 'negativ')
+        """
         probs = self.correlation_map[nps_category]
         return np.random.choice(['positiv', 'neutral', 'negativ'], p=list(probs.values()))
 
 
 class TextLengthController:
     """
-    Kontrolliert Textlängen basierend auf echten Daten:
-    Min: 1 Wort, Max: 361 Wörter, Median: 21, Mean: 28.5
+    Controls text lengths based on real data:
+    Min: 1 word, Max: 361 words, Median: 21, Mean: 28.5
     """
     def __init__(self):
         # Aus Analyse der 17.884 echten Feedbacks
@@ -149,8 +203,14 @@ class TextLengthController:
         
     def get_realistic_length(self, sentiment: str) -> int:
         """
-        Gibt realistische Wortanzahl zurück.
-        Negative Feedbacks sind oft länger (Detailkritik).
+        Returns realistic word count.
+        Negative feedback tends to be longer (detailed criticism).
+        
+        Args:
+            sentiment (str): Sentiment type ('positiv', 'neutral', 'negativ')
+            
+        Returns:
+            int: Realistic word count for the given sentiment
         """
         if sentiment == 'negativ':
             # Negative Feedbacks tendieren zu mehr Details
@@ -168,25 +228,25 @@ class TextLengthController:
 
 class AdvancedSyntheticFeedbackGenerator:
     """
-    Enterprise-Grade Generator für synthetische Kundenfeedback-Daten.
+    Enterprise-grade generator for synthetic customer feedback data.
     
     Features:
-    - Lernt aus echten Kundendaten
-    - Vollständige Anonymisierung mit kreativen Fake-Namen
-    - Demografische Diversität
-    - Realistische Sprachmuster basierend auf echten Feedbacks
-    - Zeitliche Dynamik
-    - Bias-Kontrolle
-    - Skalierbar für große Datenmengen
+    - Learns from real customer data
+    - Complete anonymization with creative fake names
+    - Demographic diversity
+    - Realistic language patterns based on real feedback
+    - Temporal dynamics
+    - Bias control
+    - Scalable for large datasets
     """
     
     def __init__(self, seed: int = 42, enable_fun_mode: bool = True):
         """
-        Initialisiert den Generator.
+        Initializes the generator.
         
         Args:
-            seed: Random seed für Reproduzierbarkeit
-            enable_fun_mode: Aktiviert kreative/lustige Namen für Werkstätten
+            seed (int): Random seed for reproducibility. Defaults to 42
+            enable_fun_mode (bool): Enables creative/fun names for dealerships. Defaults to True
         """
         np.random.seed(seed)
         random.seed(seed)
@@ -223,10 +283,13 @@ class AdvancedSyntheticFeedbackGenerator:
     
     def learn_from_real_data(self, real_data_path: str):
         """
-        Lernt Muster aus echten Kundendaten
+        Learns patterns from real customer data.
         
         Args:
-            real_data_path: Pfad zur CSV-Datei mit echten Daten
+            real_data_path (str): Path to CSV file with real data
+            
+        Returns:
+            None
         """
         print("📚 Lerne aus echten Kundendaten...")
         
@@ -253,7 +316,15 @@ class AdvancedSyntheticFeedbackGenerator:
             print(f"   ✓ {len(self.learned_patterns['common_issues'])} häufige Probleme identifiziert")
             
     def _extract_phrase_patterns(self, verbatims: List[str]) -> Dict:
-        """Extrahiert wiederkehrende Phrasen aus echten Verbatims"""
+        """
+        Extracts recurring phrases from real verbatims.
+        
+        Args:
+            verbatims (List[str]): List of verbatim texts
+            
+        Returns:
+            Dict: Dictionary with categorized phrase patterns
+        """
         
         patterns = {
             'wartezeit': [],
@@ -291,7 +362,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return patterns
     
     def _anonymize_sentence(self, sentence: str) -> str:
-        """Anonymisiert persönliche Daten in einem Satz"""
+        """
+        Anonymizes personal data in a sentence.
+        
+        Args:
+            sentence (str): Sentence to anonymize
+            
+        Returns:
+            str: Anonymized sentence
+        """
         
         # Entferne spezifische Namen und Orte
         anonymized = sentence
@@ -319,7 +398,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return anonymized.strip()
     
     def _extract_common_issues(self, verbatims: List[str]) -> List[str]:
-        """Extrahiert häufige Probleme aus Verbatims"""
+        """
+        Extracts common issues from verbatims.
+        
+        Args:
+            verbatims (List[str]): List of verbatim texts
+            
+        Returns:
+            List[str]: List of common issues found
+        """
         
         issues = []
         issue_patterns = [
@@ -343,7 +430,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return issues
     
     def _analyze_text_lengths(self, verbatims: List[str]) -> Dict:
-        """Analysiert Textlängen-Verteilung"""
+        """
+        Analyzes text length distribution.
+        
+        Args:
+            verbatims (List[str]): List of verbatim texts
+            
+        Returns:
+            Dict: Dictionary with min, max, mean, std, and quartiles of text lengths
+        """
         
         lengths = [len(str(v).split()) for v in verbatims if isinstance(v, str)]
         
@@ -356,7 +451,15 @@ class AdvancedSyntheticFeedbackGenerator:
         }
     
     def _extract_topic_indicators(self, verbatims: List[str]) -> Dict:
-        """Extrahiert Themen-Indikatoren aus Verbatims"""
+        """
+        Extracts topic indicators from verbatims.
+        
+        Args:
+            verbatims (List[str]): List of verbatim texts
+            
+        Returns:
+            Dict: Dictionary with topic counts
+        """
         
         topics = {
             'Werkstatt': ['werkstatt', 'reparatur', 'inspektion', 'wartung'],
@@ -379,7 +482,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return topic_counts
     
     def _extract_sentiment_phrases(self, df_real: pd.DataFrame) -> Dict:
-        """Extrahiert sentiment-spezifische Phrasen"""
+        """
+        Extracts sentiment-specific phrases.
+        
+        Args:
+            df_real (pd.DataFrame): DataFrame with real customer data
+            
+        Returns:
+            Dict: Dictionary with sentiment-specific phrases
+        """
         
         sentiment_phrases = {
             'positiv': [],
@@ -410,8 +521,11 @@ class AdvancedSyntheticFeedbackGenerator:
     
     def _initialize_topics(self):
         """
-        Initialisiert Topics mit exakten Gewichtungen aus Analyse von 17.884 Feedbacks
-        KRITISCH: Reifenwechsel (nur 5x im Original!) und Reinigung (0x) wurden hinzugefügt
+        Initializes topics with exact weights from analysis of 17,884 feedbacks.
+        CRITICAL: Tire change (only 5x in original!) and cleaning (0x) were added.
+        
+        Returns:
+            None
         """
         
         # MASSIV ERWEITERT - Basierend auf Analyse von 17.884 echten Feedbacks
@@ -528,7 +642,12 @@ class AdvancedSyntheticFeedbackGenerator:
         self.sentiments = ['positiv', 'neutral', 'negativ']
         
     def _initialize_fake_entities(self):
-        """Initialisiert kreative Fake-Namen für Anonymisierung"""
+        """
+        Initializes creative fake names for anonymization.
+        
+        Returns:
+            None
+        """
         
         # Kreative Werkstatt-Namen (lustig aber professionell)
         if self.enable_fun_mode:
@@ -580,7 +699,12 @@ class AdvancedSyntheticFeedbackGenerator:
         self.customer_id_prefixes = ["CUST", "KND", "USR", "CLT", "FDB"]
         
     def _initialize_personas(self):
-        """Definiert diverse Kunden-Personas für realistische Variation"""
+        """
+        Defines diverse customer personas for realistic variation.
+        
+        Returns:
+            None
+        """
         
         self.personas = {
             'digital_native': PersonaProfile(
@@ -659,10 +783,13 @@ class AdvancedSyntheticFeedbackGenerator:
         
     def _initialize_markets_and_regions(self):
         """
-        Initialisiert Märkte im korrekten Format: Region-Country
-        Beispiel: C1-DE, C1-CH, C3-CN, C5-US
+        Initializes markets in correct format: Region-Country.
+        Example: C1-DE, C1-CH, C3-CN, C5-US
         
-        Regionen: C1 (Europa), C3 (Asien), C5 (Nordamerika)
+        Regions: C1 (Europe), C3 (Asia), C5 (North America)
+        
+        Returns:
+            None
         """
         
         # Korrekte Market-Struktur mit Region-Country Format
@@ -702,7 +829,12 @@ class AdvancedSyntheticFeedbackGenerator:
         }
         
     def _initialize_text_components(self):
-        """Initialisiert Text-Bausteine basierend auf ECHTEN Kundenfeedbacks"""
+        """
+        Initializes text components based on REAL customer feedbacks.
+        
+        Returns:
+            None
+        """
         
         # MASSIV ERWEITERT - 100+ Variationen statt monotoner "customer states" Phrasen
         self.text_components = {
@@ -980,7 +1112,12 @@ class AdvancedSyntheticFeedbackGenerator:
         }
         
     def _initialize_temporal_patterns(self):
-        """Definiert zeitliche Muster für realistischere Daten"""
+        """
+        Defines temporal patterns for more realistic data.
+        
+        Returns:
+            None
+        """
         
         self.temporal_patterns = {
             'seasonal': {
@@ -1014,13 +1151,23 @@ class AdvancedSyntheticFeedbackGenerator:
         return f"{prefix}-{numbers}-{suffix}"
         
     def _generate_session_id(self) -> str:
-        """Generiert eine Session-ID für Tracking"""
+        """
+        Generates a session ID for tracking.
+        
+        Returns:
+            str: Session ID in format SID-TIMESTAMP-HEXDIGITS
+        """
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         random_part = ''.join(random.choices(string.hexdigits, k=8))
         return f"SID-{timestamp}-{random_part}"
         
     def _select_persona(self) -> Tuple[str, PersonaProfile]:
-        """Wählt eine Persona mit Gewichtung für Diversität"""
+        """
+        Selects a persona with weighting for diversity.
+        
+        Returns:
+            Tuple[str, PersonaProfile]: Tuple of (persona_name, persona_profile)
+        """
         # Gewichtete Auswahl für realistische Verteilung
         weights = {
             'digital_native': 0.25,
@@ -1039,7 +1186,16 @@ class AdvancedSyntheticFeedbackGenerator:
         return persona_name, self.personas[persona_name]
         
     def _apply_persona_style(self, text: str, persona: PersonaProfile) -> str:
-        """Wendet Persona-spezifische Sprachmuster an"""
+        """
+        Applies persona-specific language patterns.
+        
+        Args:
+            text (str): Text to apply persona style to
+            persona (PersonaProfile): Persona profile with style preferences
+            
+        Returns:
+            str: Text with applied persona style
+        """
         
         # Formality anpassen
         if persona.formality_level < 0.3:
@@ -1093,7 +1249,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return text
         
     def _add_realistic_typos(self, text: str) -> str:
-        """Fügt realistische Tippfehler hinzu"""
+        """
+        Adds realistic typos to text.
+        
+        Args:
+            text (str): Text to add typos to
+            
+        Returns:
+            str: Text with realistic typos added
+        """
         typo_types = [
             self._swap_adjacent_chars,
             self._duplicate_char,
@@ -1116,7 +1280,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return text
         
     def _swap_adjacent_chars(self, text: str) -> str:
-        """Vertauscht benachbarte Zeichen"""
+        """
+        Swaps adjacent characters.
+        
+        Args:
+            text (str): Text to modify
+            
+        Returns:
+            str: Text with swapped characters
+        """
         words = text.split()
         if words:
             word_idx = random.randint(0, len(words) - 1)
@@ -1128,7 +1300,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return ' '.join(words)
         
     def _duplicate_char(self, text: str) -> str:
-        """Dupliziert einen Buchstaben"""
+        """
+        Duplicates a character.
+        
+        Args:
+            text (str): Text to modify
+            
+        Returns:
+            str: Text with duplicated character
+        """
         words = text.split()
         if words:
             word_idx = random.randint(0, len(words) - 1)
@@ -1140,7 +1320,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return ' '.join(words)
         
     def _missing_char(self, text: str) -> str:
-        """Löscht einen Buchstaben"""
+        """
+        Removes a character.
+        
+        Args:
+            text (str): Text to modify
+            
+        Returns:
+            str: Text with missing character
+        """
         words = text.split()
         if words:
             word_idx = random.randint(0, len(words) - 1)
@@ -1152,7 +1340,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return ' '.join(words)
         
     def _wrong_case(self, text: str) -> str:
-        """Ändert Groß-/Kleinschreibung"""
+        """
+        Changes capitalization.
+        
+        Args:
+            text (str): Text to modify
+            
+        Returns:
+            str: Text with changed capitalization
+        """
         words = text.split()
         if words:
             word_idx = random.randint(0, len(words) - 1)
@@ -1160,7 +1356,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return ' '.join(words)
         
     def _common_misspelling(self, text: str) -> str:
-        """Häufige Rechtschreibfehler"""
+        """
+        Adds common misspellings.
+        
+        Args:
+            text (str): Text to modify
+            
+        Returns:
+            str: Text with common misspellings
+        """
         common_errors = [
             ("das", "dass"), ("dass", "das"),
             ("seit", "seid"), ("seid", "seit"),
@@ -1182,8 +1386,17 @@ class AdvancedSyntheticFeedbackGenerator:
         context: Optional[Dict] = None
     ) -> str:
         """
-        Generiert dynamischen Feedback-Text basierend auf gelernten Mustern
-        MIT REALISTISCHEN TEXTLÄNGEN
+        Generates dynamic feedback text based on learned patterns with REALISTIC TEXT LENGTHS.
+        
+        Args:
+            topic (str): Main topic of the feedback
+            sentiment (str): Sentiment type ('positiv', 'neutral', 'negativ')
+            persona (PersonaProfile): Persona profile for style application
+            subtopic (Optional[str]): Specific subtopic. Defaults to None
+            context (Optional[Dict]): Additional context information. Defaults to None
+            
+        Returns:
+            str: Generated feedback text
         """
         
         # Berechne Ziel-Wortanzahl basierend auf Sentiment
@@ -1306,7 +1519,15 @@ class AdvancedSyntheticFeedbackGenerator:
         persona: PersonaProfile
     ) -> str:
         """
-        Generiert Text basierend auf gelernten Mustern aus echten Daten
+        Generates text based on learned patterns from real data.
+        
+        Args:
+            topic (str): Main topic of the feedback
+            sentiment (str): Sentiment type ('positiv', 'neutral', 'negativ')
+            persona (PersonaProfile): Persona profile for style application
+            
+        Returns:
+            str: Generated feedback text based on learned patterns
         """
         
         # Wähle eine Werkstatt
@@ -1383,7 +1604,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return full_text
         
     def _detect_sentiment(self, text: str) -> str:
-        """Einfache Sentiment-Erkennung basierend auf Keywords"""
+        """
+        Simple sentiment detection based on keywords.
+        
+        Args:
+            text (str): Text to analyze
+            
+        Returns:
+            str: Detected sentiment ('positiv', 'neutral', 'negativ')
+        """
         positive_keywords = ['gut', 'super', 'toll', 'perfekt', 'zufrieden', 'empfehlen']
         negative_keywords = ['schlecht', 'enttäuscht', 'mangelhaft', 'problem', 'unzufrieden']
         
@@ -1404,7 +1633,17 @@ class AdvancedSyntheticFeedbackGenerator:
         sentiment_score: float,
         topic: str
     ) -> float:
-        """Wendet zeitliche Effekte auf Sentiment an"""
+        """
+        Applies temporal effects to sentiment.
+        
+        Args:
+            date (datetime): Date for temporal context
+            sentiment_score (float): Base sentiment score
+            topic (str): Topic of the feedback
+            
+        Returns:
+            float: Adjusted sentiment score normalized to [-1, 1]
+        """
         
         # Saisonale Effekte
         month = date.month
@@ -1445,7 +1684,16 @@ class AdvancedSyntheticFeedbackGenerator:
         nps_score: int,
         persona: PersonaProfile
     ) -> str:
-        """Berechnet realistisches Sentiment mit Persona-Einfluss"""
+        """
+        Calculates realistic sentiment with persona influence.
+        
+        Args:
+            nps_score (int): NPS score (0-10)
+            persona (PersonaProfile): Persona profile for influence
+            
+        Returns:
+            str: Calculated sentiment ('positiv', 'neutral', 'negativ')
+        """
         
         # Basis-Wahrscheinlichkeiten
         if nps_score >= 9:  # Promoter
@@ -1483,17 +1731,17 @@ class AdvancedSyntheticFeedbackGenerator:
         include_metadata: bool = True
     ) -> pd.DataFrame:
         """
-        Generiert Enterprise-Grade synthetische Daten
+        Generates enterprise-grade synthetic data.
         
         Args:
-            n_samples: Anzahl Datensätze
-            start_date: Start-Datum
-            end_date: End-Datum
-            ensure_diversity: Erzwinge Diversität
-            include_metadata: Füge Metadaten hinzu
+            n_samples (int): Number of records to generate. Defaults to 5000
+            start_date (str): Start date in format 'YYYY-MM-DD'. Defaults to '2020-01-01'
+            end_date (str): End date in format 'YYYY-MM-DD'. Defaults to '2024-12-31'
+            ensure_diversity (bool): Enforce diversity controls. Defaults to True
+            include_metadata (bool): Include metadata columns. Defaults to True
             
         Returns:
-            DataFrame mit synthetischen Daten
+            pd.DataFrame: DataFrame with synthetic customer feedback data
         """
         
         print(f">> Generiere {n_samples} synthetische Datensaetze...")
@@ -1652,7 +1900,15 @@ class AdvancedSyntheticFeedbackGenerator:
         return df
         
     def _run_quality_checks(self, df: pd.DataFrame):
-        """Führt Qualitätschecks durch"""
+        """
+        Runs quality checks on generated data.
+        
+        Args:
+            df (pd.DataFrame): DataFrame to check
+            
+        Returns:
+            None
+        """
         print("\n>> Qualitaetskontrolle:")
         
         # Check 1: Diversität
@@ -1683,7 +1939,16 @@ class AdvancedSyntheticFeedbackGenerator:
             print("   ⚠️  Warnung: Market-Verteilung ungleichmäßig")
             
     def analyze_bias_advanced(self, df: pd.DataFrame) -> Dict:
-        """Erweiterte Bias-Analyse mit statistischen Tests"""
+        """
+        Advanced bias analysis with statistical tests.
+        
+        Args:
+            df (pd.DataFrame): DataFrame to analyze
+            
+        Returns:
+            Dict: Dictionary containing basic distributions, statistical tests,
+                  diversity metrics, and bias indicators
+        """
         
         from scipy import stats
         
@@ -1711,8 +1976,8 @@ class AdvancedSyntheticFeedbackGenerator:
             try:
                 contingency_table = pd.crosstab(df[var1], df[var2])
                 chi2_stat, p_val, _, _ = stats.chi2_contingency(contingency_table)
-                chi2_stat = float(chi2_stat)
-                p_val = float(p_val)
+                chi2_stat = float(chi2_stat) # type: ignore
+                p_val = float(p_val) # type: ignore
                 
                 analysis['statistical_tests'][f'{var1}_vs_{var2}'] = {
                     'chi2': round(chi2_stat, 4),
@@ -1758,7 +2023,12 @@ class AdvancedSyntheticFeedbackGenerator:
 
 
 def main():
-    """Hauptfunktion mit erweiterten Features"""
+    """
+    Main function with extended features.
+    
+    Returns:
+        None
+    """
     
     print("="*60)
     print("🚀 ENTERPRISE SYNTHETIC FEEDBACK GENERATOR v2.0")

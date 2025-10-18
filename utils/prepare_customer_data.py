@@ -60,18 +60,18 @@ class PrepareCustomerData(object):
                 f"Market column '{market_col_name}' not found in DataFrame"
             )
 
-        # Führe alle Enhancements automatisch aus
-        print("\n🔧 Starte Data Enhancement Pipeline...")
+        # Execute all enhancements automatically
+        print("\n🔧 Starting Data Enhancement Pipeline...")
         self.categorize_nps_score()
         self.split_market_column()
         self.calculate_feedback_context_length()
         self.sentiment_analysis()
         self.classify_topics()
-        print("✅ Data Enhancement abgeschlossen!\n")
+        print("✅ Data Enhancement completed!\n")
 
     def categorize_nps_score(self) -> pd.DataFrame:
         """
-        Categorize Net Promoter Score (NPS) values into standard categories.
+        Categorizes Net Promoter Score (NPS) values into standard categories.
 
         Creates a new column 'nps_category' with the following mapping:
         - 0-6: "Detractor" (customers likely to discourage others)
@@ -79,11 +79,18 @@ class PrepareCustomerData(object):
         - 9-10: "Promoter" (customers likely to recommend)
         - NaN or invalid: "Invalid" (missing or out-of-range values)
 
-        Returns:
-            pd.DataFrame: The updated DataFrame with added 'nps_category' column
+        Args:
+            None (uses self.data and self.nps_category_col_name)
 
-        Note:
-            Modifies self.data in-place by adding the 'nps_category' column.
+        Returns:
+            pd.DataFrame: The updated DataFrame with added 'nps_category' column containing
+                         categorical NPS classifications
+
+        Notes:
+            - Modifies self.data in-place by adding the 'nps_category' column
+            - Handles string inputs by converting to integers
+            - Returns "Invalid" for out-of-range or non-numeric values
+            - Uses standard NPS categorization thresholds
         """
 
         def categorize_single_score(score):
@@ -111,23 +118,31 @@ class PrepareCustomerData(object):
 
     def split_market_column(self) -> pd.DataFrame:
         """
-        Split the Market column into Region and Country (ISO format).
+        Splits the Market column into Region and Country (ISO format).
 
         This method splits market identifiers (e.g., "C1-DE", "CE-IT") into:
         - Region: The prefix before the dash (e.g., "C1", "CE", "IT")
         - Country: The ISO country code after the dash (e.g., "DE", "IT", "FR")
 
         Creates two new columns:
-        - 'region': Business region identifier
-        - 'country': ISO 3166-1 alpha-2 country code
+        - 'region': Business region identifier (uppercase)
+        - 'country': ISO 3166-1 alpha-2 country code (uppercase)
+
+        Args:
+            None (uses self.data and self.market_col_name)
 
         Returns:
-            pd.DataFrame: Updated DataFrame with 'region' and 'country' columns
+            pd.DataFrame: Updated DataFrame with two new columns:
+                - 'region' (str): Business region identifier
+                - 'country' (str): ISO 3166-1 alpha-2 country code
 
-        Note:
-            - Handles missing or malformed market values gracefully
-            - If no dash is found, treats entire value as region with empty country
+        Notes:
+            - Handles missing or malformed market values gracefully (returns "UNKNOWN")
+            - If no dash is found, treats entire value as region with "UNKNOWN" country
+            - If multiple dashes exist, uses first part as region and last part as country
             - Modifies self.data in-place by adding region and country columns
+            - Prints statistics: unique regions/countries and top 5 of each
+            - All values are converted to uppercase for consistency
         """
 
         def split_market(market_value):
@@ -135,7 +150,7 @@ class PrepareCustomerData(object):
                 return {"region": "UNKNOWN", "country": "UNKNOWN"}
 
             try:
-                # Split am Bindestrich
+                # Split at hyphen/dash
                 parts = market_value.split("-")
                 
                 if len(parts) == 2:
@@ -144,13 +159,13 @@ class PrepareCustomerData(object):
                         "country": parts[1].strip().upper()
                     }
                 elif len(parts) == 1:
-                    # Kein Bindestrich gefunden - gesamter Wert ist Region
+                    # No dash found - entire value is region
                     return {
                         "region": parts[0].strip().upper(),
                         "country": "UNKNOWN"
                     }
                 else:
-                    # Mehr als ein Bindestrich - nimm ersten und letzten Teil
+                    # Multiple dashes - take first and last parts
                     return {
                         "region": parts[0].strip().upper(),
                         "country": parts[-1].strip().upper()
@@ -158,32 +173,32 @@ class PrepareCustomerData(object):
             except Exception:
                 return {"region": "UNKNOWN", "country": "UNKNOWN"}
 
-        # Market für jede Zeile aufteilen
-        print("🌍 Splitte Market in Region und Country...")
+        # Split market for each row
+        print("🌍 Splitting Market into Region and Country...")
         market_results = self.data[self.market_col_name].apply(split_market)
 
-        # Ergebnisse in separate Spalten aufteilen
+        # Split results into separate columns
         self.data["region"] = market_results.apply(lambda x: x["region"])
         self.data["country"] = market_results.apply(lambda x: x["country"])
 
-        # Statistiken ausgeben
+        # Print statistics
         unique_regions = self.data["region"].nunique()
         unique_countries = self.data["country"].nunique()
-        print(f"   • Gefundene Regionen: {unique_regions}")
-        print(f"   • Gefundene Länder: {unique_countries}")
+        print(f"   • Found Regions: {unique_regions}")
+        print(f"   • Found Countries: {unique_countries}")
         
-        # Top Regionen und Länder anzeigen
+        # Show top regions and countries
         top_regions = self.data["region"].value_counts().head(5)
-        print(f"   • Top Regionen: {', '.join(top_regions.index.tolist())}")
+        print(f"   • Top Regions: {', '.join(top_regions.index.tolist())}")
         
         top_countries = self.data["country"].value_counts().head(5)
-        print(f"   • Top Länder: {', '.join(top_countries.index.tolist())}")
+        print(f"   • Top Countries: {', '.join(top_countries.index.tolist())}")
 
         return self.data
 
     def calculate_feedback_context_length(self) -> pd.DataFrame:
         """
-        Calculate token count for feedback texts using tiktoken encoding.
+        Calculates token count for feedback texts using tiktoken encoding.
 
         This method uses OpenAI's tiktoken library to accurately count tokens
         for the specified model, which is crucial for:
@@ -192,34 +207,36 @@ class PrepareCustomerData(object):
         - Text processing optimization
 
         Args:
-            Uses self.feedback_token_model (str): OpenAI model name for token encoding
-            Uses self.feedback_col_name (str): Column name containing text to tokenize
+            None (uses self.feedback_token_model and self.feedback_col_name)
 
         Returns:
-            pd.DataFrame: Updated DataFrame with new column '{feedback_col_name}_token_count'
+            pd.DataFrame: Updated DataFrame with new column 'verbatim_token_count' (int)
+                         containing the token count for each feedback text
 
-        Note:
+        Notes:
             - Falls back to 'cl100k_base' encoding for unknown models
-            - Handles NaN values and non-string data gracefully
+            - Handles NaN values and non-string data gracefully (returns 0)
             - Returns 0 tokens for empty or invalid text entries
             - Modifies self.data in-place by adding the token count column
+            - Column name format: '{feedback_col_name}_token_count'
+            - Uses model-specific encoding for accurate token counting
         """
-        # Encoding für das entsprechende Modell laden
+        # Load encoding for the corresponding model
         try:
             encoding = tiktoken.encoding_for_model(self.feedback_token_model)
         except KeyError:
-            # Fallback für unbekannte Modelle
+            # Fallback for unknown models
             encoding = tiktoken.get_encoding(
                 "cl100k_base"
-            )  # Standard für GPT-4/GPT-3.5
+            )  # Standard for GPT-4/GPT-3.5
 
         def count_tokens(text):
             if pd.isna(text) or not isinstance(text, str):
                 return 0
-            # Sehr einfach: Text zu Tokens enkodieren und Anzahl zurückgeben
+            # Simple: encode text to tokens and return count
             return len(encoding.encode(str(text)))
 
-        # Token-Anzahl für jede Zeile berechnen
+        # Calculate token count for each row
         self.data[f"{self.feedback_col_name}_token_count"] = self.data[
             self.feedback_col_name
         ].apply(count_tokens)
@@ -228,20 +245,30 @@ class PrepareCustomerData(object):
 
     def sentiment_analysis(self) -> pd.DataFrame:
         """
-        Perform sentiment analysis on text data using VADER sentiment analyzer.
+        Performs sentiment analysis on feedback texts using VADER sentiment analyzer.
 
-        This method uses VADER to analyze sentiment and provides both categorical 
-        labels and confidence scores.
+        This method uses VADER (Valence Aware Dictionary and sEntiment Reasoner) 
+        to analyze sentiment and provides both categorical labels and confidence scores.
+
+        Args:
+            None (uses self.data and self.feedback_col_name)
 
         Returns:
             pd.DataFrame: Updated DataFrame with two new columns:
-                - 'sentiment_label': Categorical sentiment (e.g., "positiv", "negativ", "neutral")
-                - 'sentiment_score': Confidence score (float between -1.0 and 1.0)
+                - 'sentiment_label' (str): Categorical sentiment classification:
+                    * "positiv" (compound score ≥ 0.5)
+                    * "neutral" (compound score > -0.5 and < 0.5)
+                    * "negativ" (compound score ≤ -0.5)
+                    * "UNKNOWN" (for NaN/non-string inputs)
+                    * "ERROR" (for processing exceptions)
+                - 'sentiment_score' (float): VADER compound score between -1.0 and 1.0
 
-        Note:
-            - Handles NaN values and non-string data by returning "UNKNOWN" label
-            - Returns "ERROR" label for processing exceptions
-            - Modifies self.data in-place by adding sentiment columns
+        Notes:
+            - Handles NaN values and non-string data by returning "UNKNOWN" label with 0.0 score
+            - Returns "ERROR" label with 0.0 score for processing exceptions
+            - Modifies self.data in-place by adding both sentiment columns
+            - Uses VADER's compound score for classification thresholds
+            - Scores: -1.0 (most negative) to +1.0 (most positive)
         """
         analyzer = SentimentIntensityAnalyzer()
 
@@ -250,7 +277,7 @@ class PrepareCustomerData(object):
                 return {"label": "UNKNOWN", "sentiment_score": 0.0}
 
             try:
-                # Pipeline aufrufen und Ergebnis zurückgeben
+                # Call analyzer and return result
                 scores = analyzer.polarity_scores(text)
 
                 score = scores["compound"]
@@ -268,10 +295,10 @@ class PrepareCustomerData(object):
             except Exception:
                 return {"label": "ERROR", "sentiment_score": 0.0}
 
-        # Sentiment für jede Zeile analysieren
+        # Analyze sentiment for each row
         sentiment_results = self.data[self.feedback_col_name].apply(analyze_row)
 
-        # Ergebnisse in separate Spalten aufteilen
+        # Split results into separate columns
         self.data["sentiment_label"] = sentiment_results.apply(lambda x: x["label"])
         self.data["sentiment_score"] = sentiment_results.apply(
             lambda x: x["sentiment_score"]
@@ -281,20 +308,38 @@ class PrepareCustomerData(object):
 
     def classify_topics(self) -> pd.DataFrame:
         """
-        Klassifiziert Feedback-Texte in Topics basierend auf Keyword-Matching.
+        Classifies feedback texts into topics based on keyword matching.
 
-        Diese Methode verwendet die topic_keywords.py Logik um jeden Feedback-Text
-        einer Kategorie zuzuordnen (z.B. "Lieferproblem", "Service", "Produktqualität").
+        This method uses the topic_keywords.py logic to assign each feedback text
+        to a category (e.g., "Lieferproblem", "Service", "Produktqualität").
+
+        Args:
+            None (uses self.data and self.feedback_col_name)
 
         Returns:
             pd.DataFrame: Updated DataFrame with two new columns:
-                - 'topic': Topic-Kategorie (str)
-                - 'topic_confidence': Confidence-Score (float zwischen 0.0 und 1.0)
+                - 'topic' (str): Topic category classification:
+                    * "Lieferproblem" (delivery issues)
+                    * "Service" (customer service)
+                    * "Produktqualität" (product quality)
+                    * "Preis" (pricing)
+                    * "Terminvergabe" (appointment scheduling)
+                    * "Werkstatt" (workshop/repair)
+                    * "Kommunikation" (communication)
+                    * "Fahrzeugübergabe" (vehicle handover)
+                    * "Probefahrt" (test drive)
+                    * "Finanzierung" (financing)
+                    * "Ersatzwagen" (replacement vehicle)
+                    * "Sonstiges" (other/misc)
+                - 'topic_confidence' (float): Confidence score between 0.0 and 1.0
 
-        Note:
-            - Verwendet Keyword-Matching für schnelle Klassifizierung
-            - Fallback auf "Sonstiges" wenn kein Topic passt
-            - Modifies self.data in-place by adding topic columns
+        Notes:
+            - Uses keyword matching for fast classification
+            - Falls back to "Sonstiges" if no topic matches
+            - Handles NaN values and non-string data (returns "Sonstiges" with 0.0 confidence)
+            - Returns "Sonstiges" with 0.0 confidence for processing exceptions
+            - Modifies self.data in-place by adding both topic columns
+            - Prints detailed topic distribution statistics with percentages
         """
 
         def classify_row(text):
@@ -307,17 +352,17 @@ class PrepareCustomerData(object):
             except Exception:
                 return {"topic": "Sonstiges", "confidence": 0.0}
 
-        # Topic für jede Zeile klassifizieren
-        print("\n🔍 Klassifiziere Topics...")
+        # Classify topic for each row
+        print("\n🔍 Classifying Topics...")
         topic_results = self.data[self.feedback_col_name].apply(classify_row)
 
-        # Ergebnisse in separate Spalten aufteilen
+        # Split results into separate columns
         self.data["topic"] = topic_results.apply(lambda x: x["topic"])
         self.data["topic_confidence"] = topic_results.apply(lambda x: x["confidence"])
 
-        # Statistiken ausgeben
+        # Print statistics
         topic_counts = self.data["topic"].value_counts()
-        print(f"\n📊 Topic-Verteilung:")
+        print(f"\n📊 Topic Distribution:")
         for topic, count in topic_counts.items():
             percentage = (count / len(self.data)) * 100
             print(f"   • {topic}: {count:,} ({percentage:.1f}%)")

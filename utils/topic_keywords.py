@@ -1,19 +1,19 @@
 """
-Topic-Klassifizierung für Customer Feedback basierend auf Keyword-Matching.
+Topic Classification for Customer Feedback based on Keyword Matching.
 
-Kategorien:
-- Lieferproblem: Verspätungen, fehlende Lieferungen, Versandprobleme
-- Service: Kundenservice, Beratung, Freundlichkeit, Erreichbarkeit
-- Produktqualität: Defekte, Mängel, Qualität des Produkts
-- Preis: Kosten, Preisgestaltung, zu teuer
-- Terminvergabe: Wartezeiten, Terminprobleme, Verfügbarkeit
-- Werkstatt: Reparatur, technische Arbeiten, Mechaniker
-- Kommunikation: Informationsfluss, Rückrufe, Erreichbarkeit
-- Fahrzeugübergabe: Abholung, Übergabe, Auslieferung des Fahrzeugs
-- Probefahrt: Testfahrt, Fahrzeug ausprobieren
-- Finanzierung: Leasing, Kredit, Finanzierungsangebote
-- Ersatzwagen: Leihwagen, Ersatzfahrzeug während Reparatur
-- Sonstiges: Alles andere
+Categories:
+- Lieferproblem (Delivery Issues): Delays, missing deliveries, shipping problems
+- Service: Customer service, consultation, friendliness, accessibility
+- Produktqualität (Product Quality): Defects, flaws, product quality
+- Preis (Price): Costs, pricing, too expensive
+- Terminvergabe (Appointment Scheduling): Wait times, appointment problems, availability
+- Werkstatt (Workshop): Repairs, technical work, mechanics
+- Kommunikation (Communication): Information flow, callbacks, accessibility
+- Fahrzeugübergabe (Vehicle Handover): Pickup, handover, vehicle delivery
+- Probefahrt (Test Drive): Test drive, trying out vehicle
+- Finanzierung (Financing): Leasing, credit, financing offers
+- Ersatzwagen (Replacement Vehicle): Loaner car, replacement vehicle during repair
+- Sonstiges (Other): Everything else
 """
 
 # Topic-Kategorien mit zugehörigen Keywords (Case-insensitive)
@@ -272,18 +272,18 @@ DEFAULT_TOPIC = "Sonstiges"
 
 def classify_feedback_topic(text: str, confidence_threshold: float = 0.3) -> tuple[str, float]:
     """
-    Klassifiziert ein Feedback basierend auf Keyword-Matching.
+    Classifies feedback based on keyword matching.
     
     Args:
-        text (str): Der zu klassifizierende Feedback-Text
-        confidence_threshold (float): Minimale Confidence für Topic-Zuweisung (0.0-1.0)
+        text (str): The feedback text to classify
+        confidence_threshold (float): Minimum confidence for topic assignment (0.0-1.0). Defaults to 0.3
     
     Returns:
-        tuple[str, float]: (Topic, Confidence-Score)
-            - Topic: Kategorie-Name oder "Sonstiges"
-            - Confidence: Wert zwischen 0.0 und 1.0
+        tuple[str, float]: Tuple containing (topic, confidence_score) where:
+            - topic (str): Category name or "Sonstiges" (Other)
+            - confidence_score (float): Value between 0.0 and 1.0
     
-    Beispiel:
+    Example:
         >>> classify_feedback_topic("Die Lieferung kam viel zu spät")
         ('Lieferproblem', 0.85)
     """
@@ -319,22 +319,22 @@ def classify_feedback_topic(text: str, confidence_threshold: float = 0.3) -> tup
 
 def get_all_topics() -> list[str]:
     """
-    Gibt alle verfügbaren Topic-Kategorien zurück.
+    Returns all available topic categories.
     
     Returns:
-        list[str]: Liste aller Topic-Namen inklusive "Sonstiges"
+        list[str]: List of all topic names including "Sonstiges" (Other)
     """
     return list(TOPIC_KEYWORDS.keys()) + [DEFAULT_TOPIC]
 
 
 def get_topic_keywords(topic: str) -> list[str]:
     """
-    Gibt die Keywords für ein bestimmtes Topic zurück.
+    Returns the keywords for a specific topic.
     
     Args:
-        topic (str): Topic-Name
+        topic (str): Topic name
     
     Returns:
-        list[str]: Liste der Keywords oder leere Liste
+        list[str]: List of keywords or empty list if topic not found
     """
     return TOPIC_KEYWORDS.get(topic, [])
