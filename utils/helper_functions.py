@@ -7,16 +7,20 @@ from agents import (
     set_tracing_disabled,
     Runner,
     trace,
+    ItemHelpers,
 )
+from openai.types.responses import ResponseTextDeltaEvent
 from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAIError
-from typing import Any
+from typing import Any, AsyncGenerator
 import pandas as pd
 
 # Import base utilities (avoid circular imports by importing agents only in initialize_system)
-from utils.clean_csv_file import CSVloader
+from utils.csv_loader import CSVloader
 from utils.prepare_customer_data import PrepareCustomerData
 from db.vectorstore_chroma import ChromaVectorStore
 from test.test_questions import TestQuestions
+from utils.synthetic_data_generator import AdvancedSyntheticFeedbackGenerator
+from datetime import datetime
 
 
 def is_azure_openai() -> bool:
@@ -100,28 +104,67 @@ def get_model_name(model_type: str = "gpt4o") -> str:
             return "gpt-4o-mini"  # Fallback
 
 
-def load_csv(path: str, write_local: bool = False) -> pd.DataFrame:
+def load_csv(
+    path: str = "./data/feedback_data.csv", 
+    is_synthetic: bool = False,
+    n_synthetic_samples: int=10000,
+    synthetic_start_date: str='2023-01-01',
+    synthetic_end_date: str=datetime.now().strftime('%Y-%m-%d'),
+) -> pd.DataFrame:
     """
-    Lädt CSV-Datei und führt automatisches Enhancement durch.
+    Lädt CSV-Datei mit optionalem Enhancement.
     
-    Enhancement umfasst:
-    - NPS-Kategorisierung (Detractor/Passive/Promoter)
-    - Market-Split in Region/Country
-    - Token-Count Berechnung
-    - Sentiment-Analyse
-    - Topic-Klassifizierung
+    Zwei Modi:
+    1. is_synthetic=True: Lädt synthetische Daten (bereits enhanced)
+       - Kein PrepareCustomerData (spart ~50 Sekunden)
+       - Nutzt pandas direkt (schnell)
+       - Generiert automatisch neue Daten wenn Datei nicht existiert
+       
+    2. is_synthetic=False: Lädt Original-Daten (braucht Enhancement)
+       - Volle Enhancement-Pipeline
+       - NPS-Kategorisierung, Sentiment-Analyse, Topic-Klassifizierung
+       - Speichert enhanced CSV automatisch lokal
     
     Args:
-        path: Pfad zur CSV-Datei
-        write_local: True = Speichert enhanced CSV in ./data/feedback_data_enhanced.csv
+        path: Pfad zur CSV-Datei (Standard: "./data/feedback_data.csv")
+        is_synthetic: True = Synthetische Daten (kein Enhancement nötig)
+        n_synthetic_samples: Anzahl synthetischer Datensätze (nur bei is_synthetic=True)
+        synthetic_start_date: Start-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
+        synthetic_end_date: End-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
     
     Returns:
-        Enhanced DataFrame mit zusätzlichen Spalten
+        DataFrame (enhanced oder bereits fertig)
     """
+    # Synthetische Daten laden
+    if is_synthetic:
+        if not os.path.exists(path):
+            print(f"🤖 Generiere synthetische Daten...")
+            generator = AdvancedSyntheticFeedbackGenerator(seed=42, enable_fun_mode=True)
+            
+            df_synthetic = generator.generate_enterprise_dataset(
+                n_samples=n_synthetic_samples,
+                start_date=synthetic_start_date,
+                end_date=synthetic_end_date,
+                ensure_diversity=True,
+                include_metadata=True
+            )
+            
+            # Speichere generierte Daten
+            df_synthetic.to_csv(path, index=False, encoding='utf-8-sig')
+            print(f"✅ {len(df_synthetic):,} synthetische Datensätze generiert und gespeichert: {path}")
+            
+            return df_synthetic
+        
+        # Synthetische Daten existieren → Laden mit Pandas
+        df = pd.read_csv(path, encoding='utf-8-sig')
+        print(f"✅ Synthetische Daten geladen (ohne Enhancement): {df.shape[0]} Einträge, Pfad: {path}")
+        return df
+    
+    # Originale Daten laden
     csv_loader = CSVloader(path=path, encoding="utf-8")
     df = csv_loader.load_csv()
 
-    # Prepare DataFrame with all enhancement features (automatic)
+    # Prepare DataFrame with all enhancement features
     customer_data = PrepareCustomerData(
         data=df,
         nps_category_col_name="NPS",
@@ -132,11 +175,10 @@ def load_csv(path: str, write_local: bool = False) -> pd.DataFrame:
 
     df = customer_data.data
 
-    # Optionally write enhanced CSV locally
-    if write_local:
-        write_prepared_csv(df)
+    # Write enhanced CSV locally (always)
+    write_prepared_csv(df)
 
-    print(f"✅ CSV-Daten geladen: {df.shape[0]} Einträge")
+    print(f"✅ Original-Daten enhanced: {df.shape[0]} Einträge, Pfad: {path}")
 
     return df
 
@@ -505,13 +547,88 @@ async def process_query(customer_manager, user_input: str, session=None, history
         return {"error": str(e), "error_type": type(e).__name__}
 
 
+async def process_query_streamed(
+    customer_manager, 
+    user_input: str, 
+    session=None, 
+    history_limit: int | None = None
+) -> AsyncGenerator[str | dict, None]:
+    """
+    Verarbeitet User-Query mit ECHTEM Token-Streaming.
+    
+    Args:
+        customer_manager: Customer Manager Agent
+        user_input: Benutzer-Eingabe
+        session: SQLiteSession für Kontext-Verwaltung (optional)
+        history_limit: Maximale Anzahl Historie-Einträge (optional)
+    
+    Yields:
+        str: Token-by-Token Text-Deltas
+        dict: Final result mit {"final_output": str, "agent_name": str} oder Error
+    
+    Note:
+        - Echtes Token-Streaming von OpenAI API
+        - Nutzt Runner.run_streamed() für Token-by-Token Ausgabe
+        - Kompatibel mit st.write_stream() in Streamlit
+    """
+    try:
+        if session:
+            # HISTORIE BEGRENZEN für Token-Optimierung
+            if history_limit is not None:
+                session = limit_session_history(session, history_limit)
+
+            with trace(
+                "Customer Feedback Multi-Agent Analysis (Streamed)",
+                group_id=f"session_{session.session_id}",
+            ):
+                result = Runner.run_streamed(customer_manager, user_input, session=session)
+        else:
+            # Fallback without session
+            result = Runner.run_streamed(customer_manager, user_input)
+
+        # Sammle vollständige Response für History
+        full_text = []
+        agent_name = None
+        
+        # Stream events
+        async for event in result.stream_events():
+            # Token-by-Token Text-Deltas streamen
+            if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                token = event.data.delta
+                full_text.append(token)
+                yield token  # ✅ Echtes Token-Streaming!
+            
+            # Agent-Tracking
+            elif event.type == "agent_updated_stream_event":
+                agent_name = event.new_agent.name
+        
+        # Nach Streaming: final_output ist jetzt verfügbar (wurde während Streaming aktualisiert)
+        yield {
+            "type": "final_result",
+            "final_output": str(result.final_output),
+            "agent_name": agent_name or (result.last_agent.name if result.last_agent else 'Assistant'),
+            "full_text": "".join(full_text)
+        }
+
+    except Exception as e:
+        # Return error info
+        yield {
+            "type": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+
 def initialize_system(
     is_azure_openai: bool = False,
     csv_path: str = "./data/feedback_data.csv",
-    write_enhanced_csv: bool = True,
     vectorstore_type: str = "chroma",
     create_new_store: bool = False,
-    embedding_model: str = "text-embedding-ada-002"  # Ada-002: Superior Cross-Lingual (92% avg)
+    embedding_model: str = "text-embedding-ada-002",  # best Cross-Lingual results
+    is_synthetic_data: bool = False,  # Flag for synthetical data
+    n_synthetic_samples: int = 10000,
+    synthetic_start_date: str = '2023-01-01',
+    synthetic_end_date: str = datetime.now().strftime('%Y-%m-%d')
 ):
     """
     Initialisiert das RAG-System mit allen Komponenten.
@@ -519,7 +636,6 @@ def initialize_system(
     Args:
         is_azure_openai: True = Azure OpenAI, False = Standard OpenAI
         csv_path: Pfad zur CSV-Datei mit Feedback-Daten
-        write_enhanced_csv: True = Speichert enhanced CSV lokal
         vectorstore_type: Typ des VectorStore (aktuell nur "chroma")
         create_new_store: True = VectorStore neu erstellen
         embedding_model: OpenAI Embedding-Modell für VectorStore
@@ -528,6 +644,10 @@ def initialize_system(
             - "text-embedding-ada-002": Beste Cross-Lingual Performance (78.4%)
             - "text-embedding-3-small" (Default): Günstiger, aber schwächer (29.4%)
             - "text-embedding-3-large": Teurer, aber auch schwach (32.2%)
+        is_synthetic_data: True = Synthetische Daten (kein Enhancement), False = Original-Daten
+        n_synthetic_samples: Anzahl synthetischer Datensätze (nur bei is_synthetic_data=True)
+        synthetic_start_date: Start-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
+        synthetic_end_date: End-Datum für synthetische Daten (Format: 'YYYY-MM-DD')
     
     Returns:
         tuple: (customer_manager, collection)
@@ -540,13 +660,13 @@ def initialize_system(
     
     Note:
         - Initialisiert OpenAI Client (Azure oder Standard)
-        - Lädt und enhanced CSV-Daten
+        - Lädt und enhanced CSV-Daten (automatisch gespeichert bei Original-Daten)
         - Erstellt/lädt VectorStore mit gewähltem Embedding-Modell
         - Konfiguriert Multi-Agent-System
     """
     # Import agent modules locally to avoid circular imports
     from customer_agents.chart_creator_agent import create_chart_creator_agent
-    from customer_agents_tools.search_tool import RobustSearchToolFactory
+    from customer_agents_tools.search_tool import SearchToolFactory
     from customer_agents.feedback_analysis_agent import create_feedback_analysis_agent
     from customer_agents.customer_manager_agent import create_customer_manager_agent
     from customer_agents_tools.get_metadata_tool import create_metadata_tool
@@ -563,11 +683,17 @@ def initialize_system(
         if openai_client is None:
             raise ValueError("❌ OpenAI Client konnte nicht initialisiert werden!")
     
-    # Load and enhance CSV data
-    if not os.path.exists(csv_path):
+    # Load and enhance CSV data (conditional based on data type)
+    if not is_synthetic_data and not os.path.exists(csv_path):
         raise FileNotFoundError(f"CSV-Datei nicht gefunden: {csv_path}")
         
-    customer_data = load_csv(path=csv_path, write_local=write_enhanced_csv)
+    customer_data = load_csv(
+        path=csv_path, 
+        is_synthetic=is_synthetic_data,
+        n_synthetic_samples=n_synthetic_samples,
+        synthetic_start_date=synthetic_start_date,
+        synthetic_end_date=synthetic_end_date
+    )
 
     # Load or create VectorStore with specified embedding model
     collection = load_vectorstore(
@@ -584,7 +710,7 @@ def initialize_system(
         raise ValueError("❌ VectorStore ist leer - keine Dokumente wurden erstellt!")
 
     # Create tools for agents
-    search_customer_feedback = RobustSearchToolFactory.create_search_tool(collection)
+    search_customer_feedback = SearchToolFactory.create_search_tool(collection)
     build_metadata_snapshot = create_metadata_tool(collection)
     
     # ✅ BUILD METADATA SNAPSHOT (Pre-compute all metadata for Customer Manager)
