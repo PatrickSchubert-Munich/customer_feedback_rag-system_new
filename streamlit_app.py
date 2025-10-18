@@ -11,24 +11,16 @@ import time
 from agents import SQLiteSession
 from dotenv import load_dotenv
 
-# Import existing system components - identical to app.py
-from agents import Runner, trace
-from utils.prepare_customer_data import PrepareCustomerData
-from customer_agents.chart_creator_agent import create_chart_creator_agent
-from customer_agents_tools.robust_search_tool_factory import RobustSearchToolFactory
-from customer_agents.feedback_analysis_agent import create_feedback_analysis_agent
-from customer_agents.customer_manager_agent import create_customer_manager_agent
-from customer_agents_tools.get_metadata_tool import create_metadata_tool
-from customer_agents_tools.create_charts_tool import create_chart_creation_tool
-from customer_agents.output_summarizer_agent import create_output_summarizer_agent
-
 from utils.helper_functions import (
-    get_azure_openai_client,
-    get_openai_client,
-    load_csv,
-    load_vectorstore,
     is_azure_openai,
+    check_vectorstore_exists,
+    extract_chart_path,
+    process_query,
+    initialize_system,
 )
+
+# Import test questions for example queries
+from test.test_questions import TestQuestions
 
 # Import our simple history manager
 from utils.simple_history import SimpleConversationHistory
@@ -44,6 +36,8 @@ load_dotenv()
 FILE_PATH_CSV = "./data/feedback_data.csv"
 # FILE_PATH_CSV = f"{FILE_PATH_CSV_RAW.split(".csv")[0]}_enhanced.csv"
 VECTORSTORE_TYPE = "chroma"
+VECTORSTORE_PATH = "./chroma"
+VECTORSTORE_COLLECTION_NAME = "feedback_data"
 
 # AZURE OPENAI OR OPENAI - Automatische Erkennung basierend auf Umgebungsvariablen
 IS_AZURE_OPENAI = is_azure_openai()
@@ -54,15 +48,22 @@ IS_AZURE_OPENAI = is_azure_openai()
 # Empfohlen: 3-5 für Balance zwischen Kontext und Kosten
 HISTORY_LIMIT = 5  # Begrenzt auf letzte 5 Interaktionen
 
-# EXAMPLE QUERIES - Vordefinierte Beispiel-Fragen für die Sidebar
-# Diese können leicht angepasst werden, um verschiedene Use Cases zu demonstrieren
+# EXAMPLE QUERIES - Strategisch ausgewählte Fragen für maximalen "AHA-Effekt"
 EXAMPLE_QUERIES = [
-    "Welche Märkte gibt es?",
-    "Wie ist die NPS-Verteilung?",
-    "Top 5 Kundenbeschwerden",
-    "Analysiere negative Feedbacks",
-    "Sentiment der Promoter",
-    "Balkenchart mit Märkten und Sentiments"
+    # 1. META-FRAGE - Zeigt metadata_tool in Aktion (schnelle, präzise Antwort)
+    TestQuestions.META_QUESTIONS[1],  # "Wie ist die NPS-Verteilung in deinem Datensatz?"
+    
+    # 2. KOMPLEXE ANALYSE - Nutzt search_customer_feedback mit Multi-Kriterien
+    TestQuestions.FEEDBACK_ANALYSIS_QUESTIONS[2],  # "Was sind die Top 5 Beschwerden?"
+    
+    # 3. SENTIMENT + NPS - Zeigt intelligente Filterung und Sentiment-Analyse
+    TestQuestions.SENTIMENT_QUESTIONS[1],  # "Analysiere das Sentiment der Promoter"
+    
+    # 4. GEOGRAFISCHE ANALYSE - Demonstriert Markt-Filter und regionale Insights
+    TestQuestions.FEEDBACK_ANALYSIS_QUESTIONS[1],  # "Zeige mir negative Feedbacks aus Deutschland"
+    
+    # 5. CHART-GENERATION - Zeigt chart_creator_agent für visuelle Insights
+    "Erstelle ein Balkendiagramm der Top 5 Themen mit NPS-Scores",
 ]
 
 # Removed render_native_response and render_structured_summary functions
@@ -86,25 +87,6 @@ def ensure_session_initialized():
 def get_cached_conversation_stats():
     """Cached wrapper für conversation stats um multiple API-Calls zu vermeiden."""
     return st.session_state.conversation.get_summary_stats()
-
-
-def extract_chart_path(text: str) -> tuple[str, str | None]:
-    """
-    Extrahiert Chart-Pfad aus Response-Text (Format: __CHART__[pfad]__CHART__).
-    
-    Returns:
-        tuple: (text_without_chart_marker, chart_path or None)
-    """
-    import re
-    pattern = r'__CHART__(.*?)__CHART__'
-    match = re.search(pattern, text)
-    
-    if match:
-        chart_path = match.group(1).strip()
-        text_without_marker = re.sub(pattern, '', text).strip()
-        return text_without_marker, chart_path
-    
-    return text, None
 
 
 def render_chart(chart_path: str, size: str = "Mittel") -> None:
@@ -173,9 +155,14 @@ def process_user_query(user_input: str) -> None:
         placeholder = st.empty()
         placeholder.markdown("Thinking...")
         
-        # Backend-Verarbeitung
+        # Backend-Verarbeitung (process_query aus helper_functions)
         response = asyncio.run(
-            process_query(st.session_state.customer_manager, user_input, session)
+            process_query(
+                st.session_state.customer_manager, 
+                user_input, 
+                session,
+                history_limit=HISTORY_LIMIT
+            )
         )
         
         # Handle both success and error cases
@@ -223,175 +210,38 @@ def process_user_query(user_input: str) -> None:
 
 
 @st.cache_resource(show_spinner=False)
-def initialize_system(is_azure_openai: bool=False):
-    """Initialize the RAG system components - identical structure to app.py main()"""
-
-    if is_azure_openai:
-        # Initialize OpenAI client FIRST (required for VectorStore) - identical to app.py
-        azure_client = get_azure_openai_client()
-        if azure_client is None:
-            st.error("❌ Azure OpenAI Client konnte nicht initialisiert werden!")
-            st.stop()
-    else:
-        openai_client = get_openai_client()
-        if openai_client is None:
-            st.error("❌ OpenAI Client konnte nicht initialisiert werden!")
-            st.stop()
-    
-    if os.path.exists(FILE_PATH_CSV):
-        # Load data and tools - identical to app.py
-        customer_data = load_csv(path=FILE_PATH_CSV, write_local=True)
-    else:
-        raise FileNotFoundError(f"CSV - File {FILE_PATH_CSV} not found.")
-
-    # Versuche zuerst existierenden VectorStore zu laden
-    collection = load_vectorstore(
-        data=customer_data, type=VECTORSTORE_TYPE, create_new_store=False
-    )
-
-    # VALIDIERUNG: Erstelle neuen VectorStore nur wenn er nicht existiert ODER leer ist
-    if collection is None:
-        st.warning("⚠️ VectorStore existiert nicht. Erstelle neuen VectorStore...")
-        collection = load_vectorstore(
-            data=customer_data, type=VECTORSTORE_TYPE, create_new_store=True
-        )
-    elif collection.count() == 0:
-        st.warning("⚠️ VectorStore ist leer. Erstelle neuen VectorStore für funktionierende App...")
-        collection = load_vectorstore(
-            data=customer_data, type=VECTORSTORE_TYPE, create_new_store=True
-        )
-    else:
-        st.success(f"✅ Existierender VectorStore geladen mit {collection.count():,} Dokumenten")
-    
-    # Finale Validierung nach möglicher Neuerstellung
-    if collection is None:
-        st.error("❌ VectorStore konnte nicht erstellt werden!")
-        st.stop()
-    if collection.count() == 0:
-        st.error("❌ VectorStore ist nach Erstellung immer noch leer!")
-        st.stop()
-
-    # Use enhanced search tool with better error handling - identical to app.py
-    search_customer_feedback = RobustSearchToolFactory.create_enhanced_search_tool(
-        collection
-    )
-
-    # Create metadata snapshot builder
-    build_metadata_snapshot = create_metadata_tool(collection)  # Returns snapshot builder function
-
-    # ✅ BUILD METADATA SNAPSHOT (Pre-compute all metadata for Customer Manager)
-    # This avoids repeated tool calls and embeds metadata directly in the agent instructions
-    metadata_snapshot = build_metadata_snapshot()
-
-    # Create agent hierarchy with native handoffs - identical to app.py
-    output_summarizer = create_output_summarizer_agent()
-
-    # Create Feedback Analysis Agent (focused on search and content analysis) - identical to app.py
-    feedback_analysis_agent = create_feedback_analysis_agent(
-        search_tool=search_customer_feedback,
-        handoff_agents=[output_summarizer],
-    )
-
-    # Create Chart Creator Agent (reads market mappings from Session Context)
-    chart_creation_agent = create_chart_creator_agent(
-        chart_creation_tool=create_chart_creation_tool(collection)
-    )
-
-    # ✅ Customer Manager with embedded metadata snapshot (NO metadata_analysis_agent needed!)
-    customer_manager = create_customer_manager_agent(
-        metadata_snapshot=metadata_snapshot,  # Pre-computed metadata embedded in instructions
-        handoff_agents=[
-            feedback_analysis_agent,  # For content analysis
-            chart_creation_agent,     # For visualizations
-        ],
-    )
-
-    return customer_manager, collection
-
-
-def limit_session_history(session, max_history: int | None = None):
+def initialize_system_cached(is_azure_openai: bool=False):
     """
-    Begrenzt die Session-Historie auf die letzten N Einträge.
-    WICHTIG: Entfernt __CHART__ Marker aus History für Agent-Kontext!
-    
-    Args:
-        session: SQLiteSession Objekt
-        max_history: Maximale Anzahl Historie-Einträge (None = unbegrenzt)
-    
-    Returns:
-        Session mit begrenzter Historie und bereinigten Responses
+    Streamlit-Wrapper für initialize_system mit Caching.
+    Ruft die Business-Logic aus helper_functions auf und fügt UI-spezifische Validierung hinzu.
     """
-    import re
-    
     try:
-        # Hole aktuelle Historie
-        history = session.get_history()
+        # Rufe die core Business-Logic auf (aus helper_functions)
+        customer_manager, collection = initialize_system(
+            is_azure_openai=is_azure_openai,
+            csv_path=FILE_PATH_CSV,
+            write_enhanced_csv=True,
+            vectorstore_type=VECTORSTORE_TYPE,
+            create_new_store=False
+        )
         
-        if not history:
-            return session
+        return customer_manager, collection
         
-        # ✅ CHART-BEREINIGUNG: Entferne __CHART__ Marker für Token-Optimierung
-        # Charts sind nur für UI relevant, nicht für Agent-Kontext!
-        cleaned_history = []
-        for entry in history:
-            # Erstelle Kopie des Eintrags
-            cleaned_entry = entry.copy()
-            
-            # Bereinige Response von Chart-Markern
-            if "content" in cleaned_entry:
-                content = cleaned_entry["content"]
-                if isinstance(content, list):
-                    # Handle multi-part content
-                    cleaned_content = []
-                    for part in content:
-                        if isinstance(part, dict) and "text" in part:
-                            # Entferne __CHART__pfad__CHART__ Pattern
-                            cleaned_text = re.sub(r'__CHART__[^_]+__CHART__', '', part["text"])
-                            part["text"] = cleaned_text.strip()
-                        cleaned_content.append(part)
-                    cleaned_entry["content"] = cleaned_content
-                elif isinstance(content, str):
-                    # Handle simple string content
-                    cleaned_entry["content"] = re.sub(r'__CHART__[^_]+__CHART__', '', content).strip()
-            
-            cleaned_history.append(cleaned_entry)
-        
-        # Begrenze History falls nötig
-        if max_history and len(cleaned_history) > max_history:
-            cleaned_history = cleaned_history[-max_history:]
-        
-        # Setze bereinigte History zurück
-        session.set_history(cleaned_history)
-            
-    except (AttributeError, Exception) as e:
-        # Falls Session keine History-Methoden hat oder Fehler auftritt,
-        # gib Original zurück (Fallback für Robustheit)
-        pass
-    
-    return session
-
-
-async def process_query(customer_manager, user_input: str, session=None):
-    """Process user query with enhanced functionality - returns result object for Streamlit rendering"""
-    try:
-        if session:
-            # HISTORIE BEGRENZEN für Token-Optimierung
-            session = limit_session_history(session, HISTORY_LIMIT)
-
-            with trace(
-                "Customer Feedback Multi-Agent Analysis",
-                group_id=f"session_{session.session_id}",
-            ):
-                result = await Runner.run(customer_manager, user_input, session=session)
-        else:
-            # Fallback without session
-            result = await Runner.run(customer_manager, user_input)
-
-        return result
-
+    except ValueError as e:
+        # Handle initialization errors with Streamlit UI
+        st.error(str(e))
+        st.stop()
+    except FileNotFoundError as e:
+        st.error(str(e))
+        st.stop()
     except Exception as e:
-        # Return error info for display
-        return {"error": str(e), "error_type": type(e).__name__}
+        st.error(f"❌ Unerwarteter Fehler bei System-Initialisierung: {e}")
+        st.stop()
+
+
+# process_query ist jetzt in utils.helper_functions
+# und wird direkt von dort importiert und verwendet
+# (limit_session_history wird intern von process_query aufgerufen)
 
 
 def main():
@@ -435,18 +285,40 @@ def main():
         st.session_state.conversation = SimpleConversationHistory()
 
     if "system_initialized" not in st.session_state:
-        with st.spinner("🔄 Initializing RAG system..."):
-            try:
-                customer_manager, collection = initialize_system(is_azure_openai=IS_AZURE_OPENAI)
-                st.session_state.customer_manager = customer_manager
-                st.session_state.collection = collection
-                st.session_state.system_initialized = True
-                st.info(
-                    f"System initialized with {collection.count():,} documents in vectorstore"
-                )
-            except Exception as e:
-                st.error(f"❌ Failed to initialize system: {e}")
-                st.stop()
+        st.session_state.system_initialized = False
+    
+    # System-Initialisierung nur beim ersten Mal durchführen
+    if not st.session_state.system_initialized:
+        # Prüfe ob VectorStore existiert für passende Status-Nachricht
+        vectorstore_exists, doc_count = check_vectorstore_exists(
+            vectorstore_path=VECTORSTORE_PATH,
+            collection_name=VECTORSTORE_COLLECTION_NAME
+        )
+        
+        if vectorstore_exists and doc_count > 0:
+            # VectorStore existiert bereits - normale Initialisierung
+            with st.spinner("🔄 Initializing RAG system..."):
+                try:
+                    customer_manager, collection = initialize_system_cached(is_azure_openai=IS_AZURE_OPENAI)
+                    st.session_state.customer_manager = customer_manager
+                    st.session_state.collection = collection
+                    st.session_state.system_initialized = True
+                    st.success(f"✅ System initialized with {collection.count():,} documents in vectorstore")
+                except Exception as e:
+                    st.error(f"❌ Failed to initialize system: {e}")
+                    st.stop()
+        else:
+            # VectorStore muss erstellt werden - spezielle Nachricht
+            with st.spinner("🔨 VectorStore will be created new. Please wait a little bit - this may take a few minutes..."):
+                try:
+                    customer_manager, collection = initialize_system_cached(is_azure_openai=IS_AZURE_OPENAI)
+                    st.session_state.customer_manager = customer_manager
+                    st.session_state.collection = collection
+                    st.session_state.system_initialized = True
+                    st.success(f"✅ VectorStore created successfully with {collection.count():,} documents!")
+                except Exception as e:
+                    st.error(f"❌ Failed to create VectorStore: {e}")
+                    st.stop()
 
     # ============================================================================
     # SIDEBAR - Settings and Statistics
