@@ -16,46 +16,126 @@ class RobustSearchToolFactory:
         """Erstellt Search Tool mit verbessertem Error Handling für LLMs"""
 
         @function_tool
-        def search_customer_feedback(query: str, max_results: int = 15) -> str:
+        def search_customer_feedback(
+            query: str,
+            max_results: int = 15,
+            market_filter: str | None = None,
+            region_filter: str | None = None,
+            country_filter: str | None = None,
+            sentiment_filter: str | None = None,
+            nps_filter: str | None = None,
+            topic_filter: str | None = None,
+            date_from: str | None = None,
+            date_to: str | None = None,
+        ) -> str:
             """
-            Durchsucht Kundenfeedback-Datenbank semantisch.
+            Durchsucht Kundenfeedback-Datenbank semantisch mit optionalen Metadata-Filtern.
 
             Args:
                 query (str): Semantische Suchanfrage in Deutsch oder Englisch.
                     Beispiele: "Lieferprobleme", "Service-Beschwerden", "positive Erfahrungen"
+                    
                 max_results (int, optional): Anzahl Ergebnisse (3-50). Default: 15.
                     Bei Top-N Analysen entsprechend setzen (z.B. "Top 5" → max_results=5)
+                
+                market_filter (str | None, optional): Markt-Filter für spezifischen Market.
+                    Format: "REGION-COUNTRY" (z.B. "C1-DE", "CE-IT")
+                    None = alle Märkte durchsuchen. Default: None
+                
+                region_filter (str | None, optional): Regions-Filter.
+                    Werte: "C1", "CE", etc.
+                    None = alle Regionen. Default: None
+                
+                country_filter (str | None, optional): Länder-Filter (ISO 3166-1 Alpha-2).
+                    Werte: "DE", "IT", "FR", "ES", etc.
+                    None = alle Länder. Default: None
+                
+                sentiment_filter (str | None, optional): Sentiment-Filter.
+                    Werte: "positiv", "neutral", "negativ"
+                    None = alle Sentiments. Default: None
+                
+                nps_filter (str | None, optional): NPS-Kategorie-Filter.
+                    Werte: "Promoter" (9-10), "Passive" (7-8), "Detractor" (0-6)
+                    None = alle NPS-Kategorien. Default: None
+                
+                topic_filter (str | None, optional): Topic-Filter.
+                    Werte: "Lieferproblem", "Service", "Produktqualität", "Preis",
+                           "Terminvergabe", "Werkstatt", "Kommunikation", "Sonstiges"
+                    None = alle Topics. Default: None
+                
+                date_from (str | None, optional): Start-Datum für Zeitraum-Filter.
+                    Format: "YYYY-MM-DD" (z.B. "2023-01-01")
+                    None = kein Start-Datum. Default: None
+                
+                date_to (str | None, optional): End-Datum für Zeitraum-Filter.
+                    Format: "YYYY-MM-DD" (z.B. "2023-12-31")
+                    None = kein End-Datum. Default: None
 
             Returns:
                 str: Formatierte Ergebnisse mit Confidence-Bewertung oder Fehlermeldung.
                     Format: "[CONFIDENCE]\n[RESULTS]\n[SUMMARY]"
-                    - Bei Erfolg: Liste von Feedbacks mit Metadaten:
-                      * market: Market-ID (z.B. "C1-DE")
-                      * region: Business-Region (z.B. "C1", "CE")
-                      * country: ISO Ländercode (z.B. "DE", "IT")
-                      * nps: Net Promoter Score (0-10)
-                      * nps_category: Detractor/Passive/Promoter
-                      * sentiment_label: positiv/neutral/negativ
-                      * topic: Topic-Kategorie (z.B. "Service", "Lieferproblem")
-                    - Bei Fehler: Detaillierte Fehlermeldung mit Lösungsvorschlägen
-                    - Bei niedriger Confidence: Warnung über eingeschränkte Relevanz
+                    
+                    Bei Erfolg - Liste von Feedbacks mit Metadaten:
+                      • market: Market-ID (z.B. "C1-DE")
+                      • region: Business-Region (z.B. "C1", "CE")
+                      • country: ISO Ländercode (z.B. "DE", "IT")
+                      • nps: Net Promoter Score (0-10)
+                      • nps_category: Detractor/Passive/Promoter
+                      • sentiment_label: positiv/neutral/negativ
+                      • topic: Topic-Kategorie (z.B. "Service", "Lieferproblem")
+                      • date_str: Datum als String
+                    
+                    Bei Fehler: Detaillierte Fehlermeldung mit Lösungsvorschlägen
+                    Bei niedriger Confidence: Warnung über eingeschränkte Relevanz
+                    Bei keinen Ergebnissen: Info über Filter-Kombination
 
             Raises:
                 None: Alle Fehler werden als formatierte String-Meldungen zurückgegeben
 
             Examples:
+                >>> # Basis-Suche ohne Filter
                 >>> search_customer_feedback("Probleme mit Lieferung", max_results=10)
                 "✅ HOHE RELEVANZ\\n✅ Gefunden: 10 Feedbacks (Ø Relevanz: 85.3%)\\n..."
                 
-                >>> search_customer_feedback("xyz123", max_results=5)
-                "❌ KEINE RELEVANTEN ERGEBNISSE GEFUNDEN\\n📊 Qualitäts-Metriken:..."
+                >>> # Lieferprobleme aus den letzten 3 Monaten
+                >>> search_customer_feedback(
+                ...     query="Lieferverzögerung",
+                ...     topic_filter="Lieferproblem",
+                ...     date_from="2024-07-01",
+                ...     max_results=20
+                ... )
+                "✅ MODERATE RELEVANZ\\n✅ Gefunden: 15 Feedbacks (Ø Relevanz: 72.1%)\\n..."
+                
+                >>> # Negative Service-Feedbacks aus Deutschland
+                >>> search_customer_feedback(
+                ...     query="unfreundlicher Service",
+                ...     country_filter="DE",
+                ...     sentiment_filter="negativ",
+                ...     topic_filter="Service"
+                ... )
+                "✅ HOHE RELEVANZ\\n✅ Gefunden: 12 Feedbacks (Ø Relevanz: 88.5%)\\n..."
+                
+                >>> # Detractor-Feedbacks für spezifischen Market
+                >>> search_customer_feedback(
+                ...     query="Beschwerde",
+                ...     market_filter="C1-DE",
+                ...     nps_filter="Detractor",
+                ...     date_from="2023-01-01",
+                ...     date_to="2023-03-31"
+                ... )
+                "⚠️ NIEDRIGE RELEVANZ\\n⚠️ Gefunden: 8 Feedbacks (Ø Relevanz: 58.2%)\\n..."
 
             Notes:
-                - Confidence-Schwellenwerte: REJECT <40%, LOW <60%, MEDIUM <75%, HIGH ≥75%
-                - Ergebnisse enthalten: Feedback-Text, Market, NPS, Sentiment
-                - Bei multiplen Märkten: Automatische Gruppierung in Summary
+                - Confidence-Schwellenwerte: REJECT <50%, LOW <65%, MEDIUM <80%, HIGH ≥80%
+                - Filter werden mit AND kombiniert (alle müssen zutreffen)
+                - Bei zu vielen Filtern können Ergebnisse leer sein
+                - Semantic Search arbeitet NACH Metadata-Filterung
+                - Topic "Sonstiges" enthält Feedbacks ohne spezifische Keywords
             """
             print(f"🔍 SEARCH TOOL: query='{query}', max_results={max_results}")
+            print(f"   📊 Filter: market={market_filter}, region={region_filter}, country={country_filter}")
+            print(f"   📊 Filter: sentiment={sentiment_filter}, nps={nps_filter}, topic={topic_filter}")
+            print(f"   📊 Filter: date_from={date_from}, date_to={date_to}")
 
             # Input Validation mit LLM-freundlichen Messages
             if not query or query.strip() == "":
@@ -72,23 +152,130 @@ class RobustSearchToolFactory:
             if collection is None:
                 return "❌ CRITICAL ERROR: No customer feedback database available. Please contact system administrator."
 
+            # ========================================
+            # BUILD WHERE CLAUSE (wie in create_charts_tool.py)
+            # ========================================
+            where_filter = {}
+            filter_list = []
+
+            # Geographic filters
+            if market_filter:
+                filter_list.append({"market": {"$eq": market_filter}})
+            
+            if region_filter:
+                filter_list.append({"region": {"$eq": region_filter}})
+            
+            if country_filter:
+                filter_list.append({"country": {"$eq": country_filter}})
+
+            # Analytical filters
+            if sentiment_filter:
+                filter_list.append({"sentiment_label": {"$eq": sentiment_filter.lower()}})
+            
+            if nps_filter:
+                filter_list.append({"nps_category": {"$eq": nps_filter}})
+            
+            if topic_filter:
+                filter_list.append({"topic": {"$eq": topic_filter}})
+
+            # Date range filters
+            if date_from or date_to:
+                from datetime import datetime
+                
+                if date_from:
+                    try:
+                        date_from_obj = datetime.strptime(date_from, "%Y-%m-%d")
+                        timestamp_from = int(date_from_obj.timestamp())
+                        filter_list.append({"date": {"$gte": timestamp_from}})
+                        print(f"   ⏰ Date From: {date_from} → timestamp {timestamp_from}")
+                    except ValueError:
+                        return f"❌ ERROR: Invalid date_from format '{date_from}'. Expected YYYY-MM-DD (e.g., '2023-01-01')"
+                
+                if date_to:
+                    try:
+                        date_to_obj = datetime.strptime(date_to, "%Y-%m-%d")
+                        # Set to end of day (23:59:59)
+                        timestamp_to = int(date_to_obj.timestamp()) + 86399
+                        filter_list.append({"date": {"$lte": timestamp_to}})
+                        print(f"   ⏰ Date To: {date_to} → timestamp {timestamp_to}")
+                    except ValueError:
+                        return f"❌ ERROR: Invalid date_to format '{date_to}'. Expected YYYY-MM-DD (e.g., '2023-12-31')"
+
+            # Combine filters with $and if multiple conditions
+            if len(filter_list) > 1:
+                where_filter = {"$and": filter_list}
+            elif len(filter_list) == 1:
+                where_filter = filter_list[0]
+            else:
+                where_filter = None
+
+            print(f"   🔧 WHERE Filter: {where_filter}")
+
             try:
                 results = collection.query(
                     query_texts=[query],
                     n_results=max_results,
+                    where=where_filter,
                     include=["documents", "metadatas", "distances"],
                 )
 
                 # Result Validation
                 if not results or not results.get("documents"):
-                    return "📭 NO RESULTS: No customer feedback found matching your search criteria. Try:\n- Using different keywords\n- Broader search terms\n- Checking if the market/timeframe exists"
+                    # Build filter summary for error message
+                    active_filters = []
+                    if market_filter:
+                        active_filters.append(f"Market={market_filter}")
+                    if region_filter:
+                        active_filters.append(f"Region={region_filter}")
+                    if country_filter:
+                        active_filters.append(f"Country={country_filter}")
+                    if sentiment_filter:
+                        active_filters.append(f"Sentiment={sentiment_filter}")
+                    if nps_filter:
+                        active_filters.append(f"NPS={nps_filter}")
+                    if topic_filter:
+                        active_filters.append(f"Topic={topic_filter}")
+                    if date_from:
+                        active_filters.append(f"From={date_from}")
+                    if date_to:
+                        active_filters.append(f"To={date_to}")
+                    
+                    filter_info = f" with filters: {', '.join(active_filters)}" if active_filters else ""
+                    
+                    return f"""📭 NO RESULTS: No customer feedback found matching your search criteria{filter_info}.
+
+Try:
+- Using different or broader keywords
+- Removing some filters (current: {len(active_filters)} active)
+- Checking if the filter values exist (e.g., topic='Lieferproblem' vs. 'Lieferung')
+- Expanding date range if using date filters"""
 
                 documents = results["documents"][0]
                 metadatas = results.get("metadatas", [None])[0] or []
                 distances = results.get("distances", [None])[0] or []
 
                 if len(documents) == 0:
-                    return "📭 NO RESULTS: Search completed but found 0 matching feedback entries. Try different search terms."
+                    active_filters = []
+                    if market_filter:
+                        active_filters.append(f"Market={market_filter}")
+                    if region_filter:
+                        active_filters.append(f"Region={region_filter}")
+                    if country_filter:
+                        active_filters.append(f"Country={country_filter}")
+                    if sentiment_filter:
+                        active_filters.append(f"Sentiment={sentiment_filter}")
+                    if nps_filter:
+                        active_filters.append(f"NPS={nps_filter}")
+                    if topic_filter:
+                        active_filters.append(f"Topic={topic_filter}")
+                    if date_from:
+                        active_filters.append(f"From={date_from}")
+                    if date_to:
+                        active_filters.append(f"To={date_to}")
+                    
+                    filter_info = f" (Active filters: {', '.join(active_filters)})" if active_filters else ""
+                    
+                    return f"📭 NO RESULTS: Search completed but found 0 matching feedback entries{filter_info}. Try removing some filters or using different search terms."
 
                 # ========================================
                 # CONFIDENCE EVALUATION
