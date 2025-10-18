@@ -1,8 +1,8 @@
 """
 🎨 Theme Configuration - Color Palette, Layout, Typography
 
-Zentralisierte Design-Tokens für die Customer Feedback Analysis App.
-Basiert auf GitHub's Dark Theme mit Custom Accents.
+Centralized design tokens for the Customer Feedback Analysis App.
+Based on GitHub's Dark Theme with custom accents.
 """
 
 # ============================================================================

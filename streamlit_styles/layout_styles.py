@@ -1,7 +1,7 @@
 """
 📐 Layout Styles - Main Application Layout & Spacing
 
-Hauptlayout-Styles für Container, Padding, Margins und allgemeine Spacing-Regeln.
+Main layout styles for containers, padding, margins, and general spacing rules.
 """
 
 import streamlit as st
@@ -9,13 +9,24 @@ import streamlit as st
 
 def apply_main_layout_styles() -> None:
     """
-    Wendet die Hauptlayout-Styles für die Streamlit-App an.
+    Applies main layout styles to the Streamlit app.
+
+    Returns:
+        None
 
     Features:
-    - Reduziertes Top-Padding für mehr Platz
-    - Optimiertes Spacing für Header-Bereiche
-    - Footer-freundliches Bottom-Padding
-    - Konsistente Margin-Regeln
+        - Reduced top padding for more viewport space
+        - Optimized spacing for header areas
+        - Footer-friendly bottom padding
+        - Consistent margin rules
+        - Responsive side padding
+        
+    Notes:
+        - Sets transparent app header background
+        - Adjusts block-container padding (top: 1rem, bottom: 0, sides: 5rem)
+        - Removes default margins from h1 and h3 elements
+        - Reduces hr (divider) spacing to 1rem
+        - Should be called early in app initialization
     """
     st.markdown(
         """

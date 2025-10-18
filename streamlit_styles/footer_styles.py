@@ -1,8 +1,8 @@
 """
-🦶 Footer Styles - Sticky Footer mit Live-Statistiken
+🦶 Footer Styles - Sticky Footer with Live Statistics
 
-Responsive Footer-Komponente mit System-Status und Design-System.
-Refactoriert für bessere Wartbarkeit und cleanes Design.
+Responsive footer component with system status and design system.
+Refactored for better maintainability and clean design.
 """
 
 import streamlit as st
@@ -11,10 +11,19 @@ from .theme_config import COLORS
 
 def _generate_footer_css() -> str:
     """
-    Generiert das CSS für den Footer mit Theme-Farben.
+    Generates CSS for the footer with theme colors.
 
     Returns:
-        str: CSS-Styles für den Footer
+        str: CSS styles for the footer including:
+            - Fixed positioning and sticky behavior
+            - Theme-based colors and transparency
+            - Responsive design for mobile devices
+            - Content spacing adjustments
+            
+    Notes:
+        - Uses backdrop-filter for glassmorphism effect
+        - Adds padding-bottom to main content for footer clearance
+        - Adjusts chat input margin to prevent overlap
     """
     return f"""
     <style>
@@ -85,14 +94,24 @@ def _generate_footer_css() -> str:
 
 def _build_stats_content(history_stats: dict, chart_stats: dict | None = None) -> str:
     """
-    Erstellt den Statistik-Content für den Footer.
+    Creates the statistics content for the footer.
 
     Args:
-        history_stats: Dictionary mit Historie-Statistiken
-        chart_stats: Dictionary mit Chart-Statistiken (optional)
+        history_stats (dict): Dictionary with history statistics containing:
+            - avg_user_input_length (int): Average user input token count
+            - avg_response_length (int): Average response token count
+        chart_stats (dict | None): Dictionary with chart statistics (optional) containing:
+            - count (int): Number of generated charts
+            - total_size_mb (str): Total size of charts in MB
 
     Returns:
-        str: Formatierter HTML-Content für Statistiken
+        str: Formatted HTML content for statistics display
+        
+    Notes:
+        - Displays token averages from conversation history
+        - Shows chart metrics if chart_stats is provided
+        - Uses stat-emoji class for icon styling
+        - Returns inline HTML with stat-item spans
     """
     stats_items = [
         f'<span class="stat-item">Avg Input: {history_stats.get("avg_user_input_length", 0)} tokens</span>',
@@ -116,12 +135,29 @@ def render_footer(
     custom_content: str | None = None,
 ) -> None:
     """
-    Rendert einen sticky Footer mit Live-Statistiken und schwarzem Hintergrund.
+    Renders a sticky footer with live statistics and dark background.
 
     Args:
-        history_stats: Dictionary mit Historie-Statistiken (total_interactions, session_id, etc.)
-        chart_stats: Dictionary mit Chart-Statistiken (count, total_size_mb) - optional
-        custom_content: Optional custom HTML content
+        history_stats (dict): Dictionary with history statistics containing:
+            - total_interactions (int): Total number of interactions
+            - session_id (str): Current session identifier
+            - agents_used (dict): Dictionary of agents used
+            - avg_response_length (int): Average response length in tokens
+            - avg_user_input_length (int): Average user input length in tokens
+        chart_stats (dict | None): Dictionary with chart statistics (optional) containing:
+            - count (int): Number of generated charts
+            - total_size_mb (str): Total size of charts in MB
+        custom_content (str | None): Optional custom HTML content to replace default footer
+
+    Returns:
+        None
+        
+    Notes:
+        - Footer is fixed at bottom with glassmorphism effect
+        - Shows "Powered by OpenAI | ChromaDB" by default
+        - Displays live token statistics and chart metrics
+        - Uses custom_content to override default display
+        - Automatically adjusts for mobile viewports
     """
 
     # CSS generieren
@@ -148,10 +184,20 @@ def render_footer(
 
 def render_simple_footer(message: str = "Customer Feedback Analysis System") -> None:
     """
-    Einfacher Footer ohne Live-Statistiken.
+    Renders simple footer without live statistics.
 
     Args:
-        message: Anzuzeigende Nachricht im Footer
+        message (str): Message to display in the footer. Defaults to
+                      "Customer Feedback Analysis System"
+
+    Returns:
+        None
+        
+    Notes:
+        - Uses render_footer() internally with empty stats
+        - Displays only the message without token/chart metrics
+        - Useful for static pages or loading states
+        - Maintains consistent footer styling
     """
     # Leere Stats für einfachen Footer
     simple_stats = {

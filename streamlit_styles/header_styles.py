@@ -1,7 +1,7 @@
 """
 🏷️ Header Styles - Title, Subtitle, Typewriter Effect
 
-Komponenten für die Haupt-UI-Header der Streamlit App.
+Components for the main UI header of the Streamlit app.
 """
 
 import streamlit as st
@@ -11,12 +11,21 @@ from .theme_config import COLORS, TYPOGRAPHY
 
 def render_main_title() -> None:
     """
-    Rendert den Haupttitel der Anwendung mit Brand-Styling.
+    Renders the main application title with brand styling.
+
+    Returns:
+        None
 
     Features:
-    - Text Shadow für bessere Lesbarkeit
-    - Accent Color für "Analysis"
-    - Custom Font für spielerischen Touch
+        - Text shadow for better readability
+        - Accent color for "Analysis" keyword
+        - Custom font for playful touch
+        - Responsive sizing
+        
+    Notes:
+        - Uses TYPOGRAPHY["accent_font"] for "Analysis" word
+        - Applies COLORS["primary_accent"] turquoise color
+        - Includes text shadow for depth effect
     """
     title_html = f"""
     <h1 style="
@@ -41,12 +50,25 @@ def render_subtitle_with_typewriter(
     session_key: str = "typewriter_complete",
 ) -> None:
     """
-    Rendert einen Untertitel mit Typewriter-Effekt (einmalig pro Session).
+    Renders a subtitle with typewriter effect (once per session).
 
     Args:
-        text: Text für den Typewriter-Effekt
-        speed: Geschwindigkeit des Tippens (Sekunden pro Zeichen)
-        session_key: Session State Key für Completion-Tracking
+        text (str): Text for the typewriter effect. Defaults to
+                   "Ask me anything about your customer feedback data!"
+        speed (float): Typing speed in seconds per character. Defaults to 0.05
+        session_key (str): Session state key for completion tracking.
+                          Defaults to "typewriter_complete"
+
+    Returns:
+        None
+        
+    Notes:
+        - Typewriter effect runs only once per session
+        - Uses session_state to track completion status
+        - Shows blinking cursor ("|") during typing
+        - Removes cursor after completion
+        - Subsequent renders show final text immediately
+        - Uses COLORS["text_secondary"] for subtitle color
     """
     # Prüfe ob Typewriter-Effekt bereits abgeschlossen
     if session_key not in st.session_state:
@@ -94,8 +116,16 @@ def render_subtitle_with_typewriter(
 
 def render_header_section() -> None:
     """
-    Komplette Header-Sektion mit Title + Subtitle.
-    Convenience-Funktion für einfache Nutzung.
+    Renders complete header section with title and subtitle.
+    
+    Returns:
+        None
+        
+    Notes:
+        - Convenience function for easy usage
+        - Combines render_main_title() and render_subtitle_with_typewriter()
+        - Uses default parameters for subtitle
+        - Ideal for standard header display
     """
     render_main_title()
     render_subtitle_with_typewriter()
