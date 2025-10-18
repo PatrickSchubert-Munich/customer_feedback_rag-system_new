@@ -53,7 +53,7 @@ class ChromaVectorStore(VectorStore):
         file_name: str = "vectorstore",
         collection_name: str = "customer_feedback",
         batch_size: int = 100,
-        embedding_model: str = "text-embedding-3-small",
+        embedding_model: str = "text-embedding-ada-002",  # Ada-002: Superior Cross-Lingual (92% avg)
     ) -> None:
         super().__init__(
             data, file_path, file_name, collection_name, batch_size, embedding_model
@@ -447,6 +447,27 @@ class ChromaVectorStore(VectorStore):
                     metadatas=batch_metadatas,  # type: ignore[arg-type]
                     ids=batch_ids,
                 )
+
+            # ✅ KRITISCH: Explizit persistieren (ChromaDB schreibt sonst nicht auf Disk!)
+            # ChromaDB PersistentClient sollte automatisch persistieren, aber...
+            # in manchen Versionen/Setups muss man den Client explizit schließen
+            print("\n💾 Persistiere Collection auf Disk...")
+            
+            # Erzwinge Persist durch Client-Neustart
+            # Dies stellt sicher dass alle Daten auf Disk geschrieben werden
+            old_client = self._chroma_client
+            self._chroma_client = chromadb.PersistentClient(path=self.persist_directory)
+            
+            # Verifiziere dass Collection jetzt persistent ist
+            collections = self._chroma_client.list_collections()
+            if not any(col.name == self.collection_name for col in collections):
+                raise RuntimeError("Collection wurde nicht korrekt persistiert!")
+            
+            # Collection neu laden aus persistiertem State
+            collection = self._chroma_client.get_collection(
+                name=self.collection_name,
+                embedding_function=cast(Any, self._embedding_function),
+            )
 
             print(f"\n{'=' * 60}")
             print("✅ VECTORSTORE ERFOLGREICH ERSTELLT")

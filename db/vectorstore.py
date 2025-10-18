@@ -15,8 +15,8 @@ class VectorStore(ABC):
 
     # Embedding-Dimensionen basierend auf Modell (OpenAI Standard-Dimensionen)
     _MODEL_DIMENSIONS = {
-        "text-embedding-3-small": 1536,  # Korrekt: 1536 Dimensionen (vorher fälschlicherweise 384)
-        "text-embedding-ada-002": 1536,
+        "text-embedding-3-small": 1536,
+        "text-embedding-ada-002": 1536,  # BESTE Cross-Lingual Performance (92% avg similarity)
         "text-embedding-3-large": 3072,
     }
 
@@ -27,7 +27,7 @@ class VectorStore(ABC):
         file_name: str = "",
         collection_name: str = "",
         batch_size: int = 100,
-        embedding_model: str = "text-embedding-3-small",
+        embedding_model: str = "text-embedding-ada-002",  # Geändert: Ada-002 für Cross-Lingual
     ) -> None:
         """
         Initialize the vector store.

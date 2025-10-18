@@ -71,7 +71,7 @@ def create_customer_manager_agent(
 
     return Agent(
         name="Customer Manager",
-        model="openai-gpt4-omni",
+        model="gpt-4o",
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
 
 Du bist der Customer Manager - zentraler Einstiegspunkt für alle Kundenfeedback-Anfragen.
@@ -117,6 +117,21 @@ Analysiere die User-Anfrage und entscheide:
    ✅ Nutze AUSSCHLIESSLICH die oben embedded Daten
    ✅ KEINE Handoffs, KEINE Berechnungen
    ✅ Antworte präzise und direkt
+   
+   ⚠️ WICHTIG - Datums-Validierung:
+   Wenn User nach Daten aus einem bestimmten Zeitraum fragt, PRÜFE ZUERST ob das
+   Datum im verfügbaren Zeitraum liegt (siehe "Zeitraum:" oben).
+   
+   Beispiele:
+   - User fragt: "Zeige mir Feedbacks von 2023"
+   - Zeitraum ist: "2024-01-15 bis 2024-12-20"
+   → Antworte: "❌ Keine Daten aus 2023 verfügbar. Unser Datensatz umfasst nur 
+      den Zeitraum 2024-01-15 bis 2024-12-20 (XXX Tage, XXX Einträge)."
+   
+   - User fragt: "Feedbacks vom 01.01.2025"
+   - Zeitraum ist: "2024-01-15 bis 2024-12-20"
+   → Antworte: "❌ Keine Daten aus Januar 2025 verfügbar. Der neueste Eintrag
+      in unserem Datensatz ist vom 2024-12-20."
 
 2️⃣ INHALTS-ANALYSEN → transfer_to_feedback_analysis_expert
    Beispiele:

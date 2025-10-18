@@ -222,7 +222,8 @@ def initialize_system_cached(is_azure_openai: bool=False):
             csv_path=FILE_PATH_CSV,
             write_enhanced_csv=True,
             vectorstore_type=VECTORSTORE_TYPE,
-            create_new_store=False
+            create_new_store=False,
+            embedding_model="text-embedding-ada-002"
         )
         
         return customer_manager, collection
@@ -296,7 +297,7 @@ def main():
         )
         
         if vectorstore_exists and doc_count > 0:
-            # VectorStore existiert bereits - normale Initialisierung
+            # VectorStore existiert bereits
             with st.spinner("🔄 Initializing RAG system..."):
                 try:
                     customer_manager, collection = initialize_system_cached(is_azure_openai=IS_AZURE_OPENAI)
@@ -308,7 +309,7 @@ def main():
                     st.error(f"❌ Failed to initialize system: {e}")
                     st.stop()
         else:
-            # VectorStore muss erstellt werden - spezielle Nachricht
+            # VectorStore muss erstellt werden
             with st.spinner("🔨 VectorStore will be created new. Please wait a little bit - this may take a few minutes..."):
                 try:
                     customer_manager, collection = initialize_system_cached(is_azure_openai=IS_AZURE_OPENAI)
