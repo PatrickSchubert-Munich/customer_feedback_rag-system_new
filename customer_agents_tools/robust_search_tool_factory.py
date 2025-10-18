@@ -18,14 +18,35 @@ class RobustSearchToolFactory:
         @function_tool
         def search_customer_feedback(query: str, max_results: int = 15) -> str:
             """
-            Search customer feedback with enhanced error handling and LLM-friendly responses.
+            Durchsucht Kundenfeedback-Datenbank semantisch.
 
             Args:
-                query (str): Semantic search query in German or English
-                max_results (int): Number of results to return (3-50, default: 15)
+                query (str): Semantische Suchanfrage in Deutsch oder Englisch.
+                    Beispiele: "Lieferprobleme", "Service-Beschwerden", "positive Erfahrungen"
+                max_results (int, optional): Anzahl Ergebnisse (3-50). Default: 15.
+                    Bei Top-N Analysen entsprechend setzen (z.B. "Top 5" → max_results=5)
 
             Returns:
-                str: Formatted results or detailed error message for LLM understanding
+                str: Formatierte Ergebnisse mit Confidence-Bewertung oder Fehlermeldung.
+                    Format: "[CONFIDENCE]\n[RESULTS]\n[SUMMARY]"
+                    - Bei Erfolg: Liste von Feedbacks mit Metadaten (market, nps, sentiment)
+                    - Bei Fehler: Detaillierte Fehlermeldung mit Lösungsvorschlägen
+                    - Bei niedriger Confidence: Warnung über eingeschränkte Relevanz
+
+            Raises:
+                None: Alle Fehler werden als formatierte String-Meldungen zurückgegeben
+
+            Examples:
+                >>> search_customer_feedback("Probleme mit Lieferung", max_results=10)
+                "✅ HOHE RELEVANZ\\n✅ Gefunden: 10 Feedbacks (Ø Relevanz: 85.3%)\\n..."
+                
+                >>> search_customer_feedback("xyz123", max_results=5)
+                "❌ KEINE RELEVANTEN ERGEBNISSE GEFUNDEN\\n📊 Qualitäts-Metriken:..."
+
+            Notes:
+                - Confidence-Schwellenwerte: REJECT <40%, LOW <60%, MEDIUM <75%, HIGH ≥75%
+                - Ergebnisse enthalten: Feedback-Text, Market, NPS, Sentiment
+                - Bei multiplen Märkten: Automatische Gruppierung in Summary
             """
             print(f"🔍 SEARCH TOOL: query='{query}', max_results={max_results}")
 

@@ -13,17 +13,16 @@ from dotenv import load_dotenv
 
 # Import existing system components - identical to app.py
 from agents import Runner, trace
-from prepare_customer_data import PrepareCustomerData
+from utils.prepare_customer_data import PrepareCustomerData
 from customer_agents.chart_creator_agent import create_chart_creator_agent
 from customer_agents_tools.robust_search_tool_factory import RobustSearchToolFactory
 from customer_agents.feedback_analysis_agent import create_feedback_analysis_agent
 from customer_agents.customer_manager_agent import create_customer_manager_agent
 from customer_agents_tools.get_metadata_tool import create_metadata_tool
 from customer_agents_tools.create_charts_tool import create_chart_creation_tool
-from customer_agents.metadata_analysis_agent import create_metadata_analysis_agent
 from customer_agents.output_summarizer_agent import create_output_summarizer_agent
 
-from helper_functions import (
+from utils.helper_functions import (
     get_azure_openai_client,
     get_openai_client,
     load_csv,
@@ -277,16 +276,15 @@ def initialize_system(is_azure_openai: bool=False):
         collection
     )
 
-    # Create metadata tools (unified approach) - identical to app.py
-    metadata_tools = create_metadata_tool(collection)  # Returns dict of tools
+    # Create metadata snapshot builder
+    build_metadata_snapshot = create_metadata_tool(collection)  # Returns snapshot builder function
+
+    # ✅ BUILD METADATA SNAPSHOT (Pre-compute all metadata for Customer Manager)
+    # This avoids repeated tool calls and embeds metadata directly in the agent instructions
+    metadata_snapshot = build_metadata_snapshot()
 
     # Create agent hierarchy with native handoffs - identical to app.py
     output_summarizer = create_output_summarizer_agent()
-
-    # Create specialized Metadata Analysis Agent (no handoffs - only serves Customer Manager) - identical to app.py
-    metadata_analysis_agent = create_metadata_analysis_agent(
-        metadata_tools=metadata_tools,
-    )
 
     # Create Feedback Analysis Agent (focused on search and content analysis) - identical to app.py
     feedback_analysis_agent = create_feedback_analysis_agent(
@@ -299,14 +297,13 @@ def initialize_system(is_azure_openai: bool=False):
         chart_creation_tool=create_chart_creation_tool(collection)
     )
 
-    # Customer Manager with all specialized agents + metadata tools for market mapping
+    # ✅ Customer Manager with embedded metadata snapshot (NO metadata_analysis_agent needed!)
     customer_manager = create_customer_manager_agent(
+        metadata_snapshot=metadata_snapshot,  # Pre-computed metadata embedded in instructions
         handoff_agents=[
-            metadata_analysis_agent,  # Dedicated metadata expert
-            feedback_analysis_agent,
-            chart_creation_agent,
+            feedback_analysis_agent,  # For content analysis
+            chart_creation_agent,     # For visualizations
         ],
-        metadata_tools=metadata_tools  # For Two-Step Handoff (Manager resolves markets before Chart Creator)
     )
 
     return customer_manager, collection

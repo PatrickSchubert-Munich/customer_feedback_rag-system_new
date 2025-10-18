@@ -1,8 +1,20 @@
 import pandas as pd
-from agents import function_tool
 
 
 def create_metadata_tool(collection):
+    """
+    Erstellt Metadata-Snapshot-Builder für Customer Manager.
+    
+    Da kein Metadata Analysis Agent mehr existiert, werden die Funktionen
+    direkt (ohne @function_tool Decorator) implementiert und nur für den
+    Snapshot-Build beim App-Start verwendet.
+    
+    Args:
+        collection: ChromaDB Collection mit Metadaten
+    
+    Returns:
+        callable: build_metadata_snapshot Funktion zur Snapshot-Erstellung
+    """
     def get_all_metadata() -> list:
         """Alle Metadaten werden aus der Collection geladen."""
         data = collection.get(include=["metadatas"])
@@ -37,24 +49,48 @@ def create_metadata_tool(collection):
                 df_metadata["verbatim_token_count"], errors="coerce"
             )
 
-    @function_tool
+    # ═══════════════════════════════════════════════════════════════════════
+    # METADATA EXTRACTION FUNCTIONS
+    # Direkte Implementierung ohne @function_tool - nur für Snapshot-Build
+    # ═══════════════════════════════════════════════════════════════════════
+    
     def get_unique_markets() -> str:
-        """Liefert eine kommagetrennte Liste aller eindeutigen Märkte im Datensatz.
+        """
+        Liefert alle verfügbaren Märkte im Datensatz.
 
         Returns:
-            str: Kommagetrennte Liste der Märkte
+            str: Kommagetrennte Liste der Märkte (z.B. "C1-DE, C2-AT, C3-CH")
+                 oder "Keine Marktdaten verfügbar." bei fehlenden Daten
+
+        Examples:
+            >>> get_unique_markets()
+            "C1-DE, C2-AT, C2-US, C3-CH"
         """
         if "market" in df_metadata.columns:
             unique_markets = sorted(df_metadata["market"].dropna().unique())
             return ", ".join(unique_markets)
         return "Keine Marktdaten verfügbar."
 
-    @function_tool
     def get_nps_statistics() -> str:
-        """Liefert umfassende NPS-Statistiken des Datensatzes.
+        """
+        Liefert umfassende NPS-Statistiken des Datensatzes.
 
         Returns:
-            str: NPS-Statistiken mit Durchschnitt, Verteilung und Kategorien
+            str: Multi-Line String mit NPS-Analyse:
+                - Anzahl Einträge
+                - Durchschnitt (Mean)
+                - Median
+                - Range (Min-Max)
+                - Kategorien-Verteilung (Detractor/Passive/Promoter mit Prozenten)
+                Bei fehlenden Daten: "Keine NPS-Daten verfügbar."
+
+        Examples:
+            >>> get_nps_statistics()
+            "NPS-Statistiken (1500 Einträge):\\n• Durchschnitt: 7.85\\n• Median: 8.0\\n..."
+
+        Notes:
+            - NPS-Kategorien: Detractor (0-6), Passive (7-8), Promoter (9-10)
+            - Prozente beziehen sich auf Gesamt-NPS-Einträge
         """
         if "nps" not in df_metadata.columns or df_metadata["nps"].isna().all():
             return "Keine NPS-Daten verfügbar."
@@ -83,12 +119,19 @@ def create_metadata_tool(collection):
 
         return "\n".join(lines)
 
-    @function_tool
     def get_sentiment_statistics() -> str:
-        """Liefert Sentiment-Analysestatistiken des Datensatzes.
+        """
+        Liefert Sentiment-Analysestatistiken des Datensatzes.
 
         Returns:
-            str: Sentiment-Verteilung und Durchschnittswerte
+            str: Multi-Line String mit:
+                - Sentiment-Labels-Verteilung (positiv/negativ/neutral mit Prozenten)
+                - Sentiment-Scores (Durchschnitt, Range)
+                Bei fehlenden Daten: "Keine Sentiment-Daten verfügbar."
+
+        Examples:
+            >>> get_sentiment_statistics()
+            "Sentiment-Verteilung (1500 Einträge):\\n• positiv: 800 (53.3%)\\n..."
         """
         lines = []
 
@@ -112,12 +155,18 @@ def create_metadata_tool(collection):
 
         return "\n".join(lines) if lines else "Keine Sentiment-Daten verfügbar."
 
-    @function_tool
     def get_date_range() -> str:
-        """Liefert den Zeitraum des Datensatzes.
+        """
+        Liefert den Zeitraum des Datensatzes.
 
         Returns:
-            str: Start- und Enddatum des Feedback-Zeitraums
+            str: Zeitraum mit Start/End-Datum, Anzahl Tage und Einträge.
+                 Format: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage, 1500 Einträge)"
+                 Bei fehlenden Daten: "Keine Datumsdaten verfügbar."
+
+        Examples:
+            >>> get_date_range()
+            "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage, 1500 Einträge)"
         """
         if "date_str" not in df_metadata.columns:
             return "Keine Datumsdaten verfügbar."
@@ -132,12 +181,23 @@ def create_metadata_tool(collection):
 
         return f"Zeitraum: {date_min} bis {date_max} ({total_days} Tage, {len(dates)} Einträge)"
 
-    @function_tool
     def get_verbatim_statistics() -> str:
-        """Liefert Statistiken über die Verbatim-Texte (Token-Anzahl).
+        """
+        Liefert Statistiken über Feedback-Text-Längen (Token-Anzahl).
 
         Returns:
-            str: Token-Statistiken der Feedback-Texte
+            str: Multi-Line String mit:
+                - Durchschnittliche Token-Anzahl
+                - Median, Min, Max
+                - Längenverteilung (kurz/mittel/lang mit Prozenten)
+                Bei fehlenden Daten: "Keine Token-Count-Daten verfügbar."
+
+        Examples:
+            >>> get_verbatim_statistics()
+            "Verbatim-Statistiken (1500 Texte):\\n• Durchschnittliche Länge: 45.3 Token\\n..."
+
+        Notes:
+            - Kurz: ≤20 Token, Mittel: 21-100 Token, Lang: >100 Token
         """
         if "verbatim_token_count" not in df_metadata.columns:
             return "Keine Token-Count-Daten verfügbar."
@@ -172,12 +232,22 @@ def create_metadata_tool(collection):
 
         return "\n".join(lines)
 
-    @function_tool
     def get_dataset_overview() -> str:
-        """Liefert eine kompakte Übersicht des gesamten Datensatzes.
+        """
+        Liefert kompakte Übersicht aller Datensatz-Kennzahlen.
 
         Returns:
-            str: Zusammenfassung aller wichtigen Datensatz-Kennzahlen
+            str: Multi-Line Übersicht mit:
+                - Gesamt-Anzahl Einträge
+                - Anzahl/Liste Märkte
+                - NPS-Durchschnitt
+                - Häufigstes Sentiment
+                - Zeitraum
+                Komprimierte Darstellung für schnellen Überblick.
+
+        Examples:
+            >>> get_dataset_overview()
+            "📊 DATENSATZ-ÜBERSICHT\\nGesamt: 1500 Einträge\\n🏢 Märkte: 4 (C1-DE, ...)\\n..."
         """
         lines = []
         lines.append("📊 DATENSATZ-ÜBERSICHT")
@@ -216,25 +286,35 @@ def create_metadata_tool(collection):
 
         return "\n".join(lines)
 
-    @function_tool
     def resolve_market_name(market_input: str) -> str:
         """
-        Löst eine Market-Bezeichnung zu einem validen Market-Namen im Datensatz auf.
-        
-        Nutze dieses Tool, um User-Eingaben wie "DE", "Deutschland", "US" 
-        zu den korrekten Market-Namen im Datensatz zu mappen (z.B. "C1-DE", "C2-US").
+        Mappt User-Eingaben auf valide Datensatz-Marktnamen.
         
         Args:
-            market_input: User-Eingabe für einen Markt (z.B. "DE", "Deutschland", "AT", "US")
-        
+            market_input (str): User-Eingabe für Markt.
+                Unterstützt: Kürzel (DE, AT, CH, US), Ländernamen (Deutschland, Austria),
+                exakte Market-IDs (C1-DE)
+
         Returns:
-            str: Valider Market-Name aus dem Datensatz oder Fehlermeldung
-        
-        Beispiele:
-            "DE" → "C1-DE" (wenn C1-DE im Datensatz existiert)
-            "Deutschland" → "C1-DE"
-            "US" → "C2-US" (wenn C2-US im Datensatz existiert)
-            "XYZ" → "❌ Unbekannter Markt: XYZ. Verfügbar: C1-DE, C2-US, ..."
+            str: Valider Market-Name aus Datensatz oder Fehlermeldung mit verfügbaren Märkten.
+                - Bei exakter Übereinstimmung: Market-Name (z.B. "C1-DE")
+                - Bei Partial Match: Erster Match oder Warnung bei Mehrdeutigkeit
+                - Bei Fehler: "❌ Unbekannter Markt: ... Verfügbare Märkte: ..."
+
+        Examples:
+            >>> resolve_market_name("DE")
+            "C1-DE"
+            
+            >>> resolve_market_name("Deutschland")
+            "C1-DE"
+            
+            >>> resolve_market_name("XYZ")
+            "❌ Unbekannter Markt: 'XYZ'. Verfügbare Märkte: C1-DE, C2-AT, ..."
+
+        Notes:
+            - Mapping: deutschland→DE, österreich→AT, schweiz→CH, usa→US, etc.
+            - Case-insensitive Matching
+            - Bei Mehrdeutigkeit: Nutzt ersten Match mit Warnung
         """
         if "market" not in df_metadata.columns:
             return "❌ Keine Marktdaten verfügbar."
@@ -292,13 +372,32 @@ def create_metadata_tool(collection):
         # 4. Keine Übereinstimmung gefunden
         return f"❌ Unbekannter Markt: '{market_input}'. Verfügbare Märkte: {', '.join(available_markets)}"
 
-    # Return dictionary of all available tools
-    return {
-        "get_unique_markets": get_unique_markets,
-        "get_nps_statistics": get_nps_statistics,
-        "get_sentiment_statistics": get_sentiment_statistics,
-        "get_date_range": get_date_range,
-        "get_verbatim_statistics": get_verbatim_statistics,
-        "get_dataset_overview": get_dataset_overview,
-        "resolve_market_name": resolve_market_name,
-    }
+    # ═══════════════════════════════════════════════════════════════════════
+    # SNAPSHOT BUILDER (einmalig beim App-Start)
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    def build_metadata_snapshot() -> dict:
+        """
+        Baut einen statischen Metadata-Snapshot für Customer Manager Instructions.
+        
+        Dieser Snapshot wird EINMALIG beim App-Start erstellt und direkt in die
+        Instructions des Customer Manager embedded. Dadurch entfallen Runtime-Tool-Calls
+        und der Manager kann Metadaten-Fragen direkt beantworten.
+        
+        Returns:
+            dict: Snapshot mit allen Metadaten-Werten als formatierte Strings
+                Keys: unique_markets, nps_statistics, sentiment_statistics,
+                      date_range, verbatim_statistics, dataset_overview, total_entries
+        """
+        return {
+            "unique_markets": get_unique_markets(),
+            "nps_statistics": get_nps_statistics(),
+            "sentiment_statistics": get_sentiment_statistics(),
+            "date_range": get_date_range(),
+            "verbatim_statistics": get_verbatim_statistics(),
+            "dataset_overview": get_dataset_overview(),
+            "total_entries": str(len(df_metadata)),
+        }
+
+    # Rückgabe: Nur noch die build_snapshot Funktion (keine Tools mehr für Agents)
+    return build_metadata_snapshot

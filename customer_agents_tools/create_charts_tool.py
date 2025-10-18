@@ -64,40 +64,45 @@ def create_chart_creation_tool(collection: Chroma):
         Erstellt Visualisierungen aus Customer-Feedback-Daten.
 
         Args:
-            analysis_type: Chart-Typ. Optionen:
-                - "sentiment_bar_chart": Sentiment-Verteilung als BALKENCHART
-                - "sentiment_pie_chart": Sentiment-Verteilung als KREISDIAGRAMM
-                - "nps_bar_chart": NPS-Kategorien als BALKENCHART
-                - "nps_pie_chart": NPS-Kategorien als KREISDIAGRAMM
-                - "market_bar_chart": Feedback-Volumen pro Markt (Balkenchart)
-                - "market_pie_chart": Feedback-Anteile pro Markt (Kreisdiagramm)
-                - "market_sentiment_breakdown": Sentiment-Verteilung pro Markt (Grouped Bar)
-                - "market_nps_breakdown": NPS-Kategorien pro Markt (Grouped Bar)
-                - "time_analysis": Zeitliche Entwicklung (4-Panel Dashboard)
-                - "overview": Gesamt-Überblick (4-Panel Dashboard)
+            analysis_type (str): Chart-Typ. Optionen:
+                Sentiment: "sentiment_bar_chart", "sentiment_pie_chart"
+                NPS: "nps_bar_chart", "nps_pie_chart"
+                Markt: "market_bar_chart", "market_pie_chart", 
+                       "market_sentiment_breakdown", "market_nps_breakdown"
+                Spezial: "time_analysis", "overview"
+                Default: "sentiment_chart"
             
-            query: Semantische Suche zur Filterung (z.B. "Lieferprobleme"). 
-                   Leer = alle Daten.
+            query (str, optional): Semantische Filter-Query (z.B. "Lieferprobleme").
+                Leer = alle Daten. Default: ""
             
-            market_filter: Filtere nach Markt (z.B. "C1-DE"). None = alle Märkte.
+            market_filter (str, optional): Markt-Filter (z.B. "C1-DE"). 
+                None = alle Märkte. Default: None
             
-            sentiment_filter: Filtere nach Sentiment ("positiv"/"negativ"/"neutral"). 
-                             None = alle Sentiments.
+            sentiment_filter (str, optional): Sentiment-Filter 
+                ("positiv"/"negativ"/"neutral"). Default: None
             
-            nps_filter: Filtere nach NPS-Kategorie ("Promoter"/"Passive"/"Detractor").
-                       None = alle Kategorien.
+            nps_filter (str, optional): NPS-Kategorie 
+                ("Promoter"/"Passive"/"Detractor"). Default: None
             
-            date_from: Start-Datum im Format "YYYY-MM-DD" (z.B. "2024-01-01").
-                      None = kein Start-Filter.
-            
-            date_to: End-Datum im Format "YYYY-MM-DD" (z.B. "2024-12-31").
-                    None = kein End-Filter.
+            date_from (str, optional): Start-Datum "YYYY-MM-DD". Default: None
+            date_to (str, optional): End-Datum "YYYY-MM-DD". Default: None
 
         Returns:
-            String mit Text-Beschreibung + Chart-Pfad im Format:
-            "[Beschreibung]\n__CHART__[pfad.png]__CHART__"
+            str: Text-Beschreibung + Chart-Pfad im Format:
+                "[Beschreibung]\\n__CHART__[pfad.png]__CHART__"
+                Bei Fehlern: "❌ Error: ..." oder "ℹ️ Keine Daten..."
+
+        Examples:
+            >>> feedback_analytics("sentiment_pie_chart", market_filter="C1-DE")
+            "Sentiment-Verteilung für C1-DE\\n__CHART__charts/sentiment_...png__CHART__"
             
-            Bei Fehlern: "❌ Error: ..." oder "ℹ️ Keine Daten..."
+            >>> feedback_analytics("nps_bar_chart", query="Service")
+            "NPS-Kategorien für 'Service'\\n__CHART__charts/nps_...png__CHART__"
+
+        Notes:
+            - __CHART__ Marker ist kritisch für UI-Parsing
+            - Auto-Fallback bei ungültigem analysis_type (Query-basiert)
+            - Smart Validation verhindert sinnlose Charts (z.B. Market-Chart mit 1 Markt)
         """
         try:
             # ✅ DEBUG: Log Tool-Aufruf
