@@ -9,6 +9,10 @@ Kategorien:
 - Terminvergabe: Wartezeiten, Terminprobleme, Verfügbarkeit
 - Werkstatt: Reparatur, technische Arbeiten, Mechaniker
 - Kommunikation: Informationsfluss, Rückrufe, Erreichbarkeit
+- Fahrzeugübergabe: Abholung, Übergabe, Auslieferung des Fahrzeugs
+- Probefahrt: Testfahrt, Fahrzeug ausprobieren
+- Finanzierung: Leasing, Kredit, Finanzierungsangebote
+- Ersatzwagen: Leihwagen, Ersatzfahrzeug während Reparatur
 - Sonstiges: Alles andere
 """
 
@@ -18,42 +22,43 @@ TOPIC_KEYWORDS = {
         "lieferung", "liefern", "geliefert", "versand", "verspätung", 
         "verspätet", "verzögerung", "nicht angekommen", "fehlend", 
         "zustellung", "transport", "paket", "lieferzeit", "lieferdatum",
-        "nicht erhalten", "nicht geliefert", "späte lieferung"
+        "nicht erhalten", "nicht geliefert", "späte lieferung", "lieferverzug"
     ],
     
     "Service": [
         "service", "kundenservice", "beratung", "beraten", "freundlich",
         "unfreundlich", "hilfsbereit", "kompetenz", "mitarbeiter",
         "personal", "bedienung", "ansprechpartner", "höflich", "unhöflich",
-        "empfang", "rezeption", "kundenbetreuung"
+        "empfang", "rezeption", "kundenbetreuung", "servicequalität"
     ],
     
     "Produktqualität": [
         "qualität", "defekt", "kaputt", "mangel", "mängel", "beschädigt",
         "fehler", "fehlerhaft", "problem", "funktioniert nicht", 
         "gebrochen", "riss", "kratzer", "verarbeitung", "zustand",
-        "schaden", "beschädigung", "defizit"
+        "schaden", "beschädigung", "defizit", "qualitätsmangel"
     ],
     
     "Preis": [
         "preis", "kosten", "teuer", "zu teuer", "überteuert", "rechnung",
         "bezahlung", "gebühr", "gebühren", "tarif", "euro", "€", "eur",
         "preisgestaltung", "preiswert", "günstig", "kostspielig",
-        "aufschlag", "zusatzkosten"
+        "aufschlag", "zusatzkosten", "preis-leistung"
     ],
     
     "Terminvergabe": [
         "termin", "termine", "wartezeit", "warten", "gewartet", "appointment",
         "terminvergabe", "buchung", "reservierung", "verfügbarkeit",
         "ausgebucht", "kein termin", "terminplanung", "zeitfenster",
-        "stunden gewartet", "lange wartezeit"
+        "stunden gewartet", "lange wartezeit", "terminvereinbarung"
     ],
     
     "Werkstatt": [
         "werkstatt", "reparatur", "reparieren", "repariert", "mechaniker",
-        "inspektion", "wartung", "service", "techniker", "werkstattbesuch",
+        "inspektion", "wartung", "techniker", "werkstattbesuch",
         "reifenwechsel", "ölwechsel", "bremsen", "reifen", "motor",
-        "getriebe", "fahrzeug", "auto", "wagen", "pkw"
+        "getriebe", "fahrzeug", "auto", "wagen", "pkw", "reparaturzeit",
+        "werkstattaufenthalt"
     ],
     
     "Kommunikation": [
@@ -61,7 +66,39 @@ TOPIC_KEYWORDS = {
         "rückmeldung", "rückruf", "anruf", "telefon", "erreichbarkeit",
         "e-mail", "mail", "nachricht", "kontakt", "erreichen",
         "nicht erreichbar", "keine rückmeldung", "nicht informiert",
-        "bescheid", "mitteilung"
+        "bescheid", "mitteilung", "telefonat", "informationsfluss"
+    ],
+    
+    "Fahrzeugübergabe": [
+        "übergabe", "abholung", "abholen", "auslieferung", "ausgeliefert",
+        "übernahme", "fahrzeugübergabe", "übergabetermin", "abholtermin",
+        "fahrzeug abholen", "wagen abholen", "neuwagen übergabe",
+        "schlüsselübergabe", "fahrzeugauslieferung", "bereitstellung",
+        "übergabeprozess", "fahrzeug erhalten", "in empfang genommen"
+    ],
+    
+    "Probefahrt": [
+        "probefahrt", "testfahrt", "probe fahren", "test fahren",
+        "fahrzeug testen", "auto testen", "ausprobieren", "test drive",
+        "probefahren", "testfahren", "fahrzeug ausprobieren",
+        "eine runde fahren", "zur probe", "testlauf"
+    ],
+    
+    "Finanzierung": [
+        "finanzierung", "leasing", "kredit", "rate", "raten",
+        "anzahlung", "ratenzahlung", "kreditangebot", "leasingangebot",
+        "finanzierungsangebot", "darlehen", "tilgung", "zinsen",
+        "monatliche rate", "leasingvertrag", "kreditvertrag",
+        "finanzierungsvertrag", "kreditgeber", "leasinggeber",
+        "schlussrate", "restwert"
+    ],
+    
+    "Ersatzwagen": [
+        "ersatzwagen", "leihwagen", "ersatzfahrzeug", "leihfahrzeug",
+        "mietwagen", "überbrückungsfahrzeug", "ersatz", "leihauto",
+        "ersatzauto", "mobilität", "mobilitätsgarantie",
+        "ersatzstellung", "zur verfügung gestellt", "leihgabe",
+        "fahrzeug gestellt", "auto gestellt"
     ],
 }
 
