@@ -2,6 +2,7 @@
 import pandas as pd
 import tiktoken
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from utils.topic_keywords import classify_feedback_topic
 
 
 class PrepareCustomerData(object):
@@ -24,6 +25,8 @@ class PrepareCustomerData(object):
         feedback_col_name: str = "Verbatim",
         sentiment_analysis: bool = False,
         sentiment_col_name: str = "Verbatim",
+        topic_classification: bool = False,
+        topic_col_name: str = "Verbatim",
     ):
         """
         Initialize the PrepareCustomerData processor with optional data enhancement features.
@@ -37,6 +40,8 @@ class PrepareCustomerData(object):
             feedback_col_name (str, optional): Column name containing feedback text. Defaults to "Verbatim".
             sentiment_analysis (bool, optional): Enable sentiment analysis. Defaults to False.
             sentiment_col_name (str, optional): Column name for sentiment analysis. Defaults to "Verbatim".
+            topic_classification (bool, optional): Enable topic classification. Defaults to False.
+            topic_col_name (str, optional): Column name for topic classification. Defaults to "Verbatim".
 
         Raises:
             ValueError: If required columns are not found in the DataFrame when corresponding features are enabled.
@@ -56,6 +61,10 @@ class PrepareCustomerData(object):
             raise ValueError(
                 f"Sentiment column '{sentiment_col_name}' not found in DataFrame"
             )
+        if topic_classification and topic_col_name not in data.columns:
+            raise ValueError(
+                f"Topic column '{topic_col_name}' not found in DataFrame"
+            )
 
         # Bearbeitung
         if nps_category:
@@ -68,6 +77,9 @@ class PrepareCustomerData(object):
         if sentiment_analysis:
             self.sentiment_col_name = sentiment_col_name
             self.sentiment_analysis()
+        if topic_classification:
+            self.topic_col_name = topic_col_name
+            self.classify_topics()
 
     def categorize_nps_score(self) -> pd.DataFrame:
         """
@@ -210,5 +222,53 @@ class PrepareCustomerData(object):
         self.data["sentiment_score"] = sentiment_results.apply(
             lambda x: x["sentiment_score"]
         )
+
+        return self.data
+
+    def classify_topics(self) -> pd.DataFrame:
+        """
+        Klassifiziert Feedback-Texte in Topics basierend auf Keyword-Matching.
+
+        Diese Methode verwendet die topic_keywords.py Logik um jeden Feedback-Text
+        einer Kategorie zuzuordnen (z.B. "Lieferproblem", "Service", "Produktqualität").
+
+        Args:
+            Uses self.topic_col_name (str): Column name containing text for topic classification
+
+        Returns:
+            pd.DataFrame: Updated DataFrame with two new columns:
+                - 'topic': Topic-Kategorie (str)
+                - 'topic_confidence': Confidence-Score (float zwischen 0.0 und 1.0)
+
+        Note:
+            - Verwendet Keyword-Matching für schnelle Klassifizierung
+            - Fallback auf "Sonstiges" wenn kein Topic passt
+            - Modifies self.data in-place by adding topic columns
+        """
+
+        def classify_row(text):
+            if pd.isna(text) or not isinstance(text, str):
+                return {"topic": "Sonstiges", "confidence": 0.0}
+
+            try:
+                topic, confidence = classify_feedback_topic(text)
+                return {"topic": topic, "confidence": confidence}
+            except Exception:
+                return {"topic": "Sonstiges", "confidence": 0.0}
+
+        # Topic für jede Zeile klassifizieren
+        print("\n🔍 Klassifiziere Topics...")
+        topic_results = self.data[self.topic_col_name].apply(classify_row)
+
+        # Ergebnisse in separate Spalten aufteilen
+        self.data["topic"] = topic_results.apply(lambda x: x["topic"])
+        self.data["topic_confidence"] = topic_results.apply(lambda x: x["confidence"])
+
+        # Statistiken ausgeben
+        topic_counts = self.data["topic"].value_counts()
+        print(f"\n📊 Topic-Verteilung:")
+        for topic, count in topic_counts.items():
+            percentage = (count / len(self.data)) * 100
+            print(f"   • {topic}: {count:,} ({percentage:.1f}%)")
 
         return self.data
