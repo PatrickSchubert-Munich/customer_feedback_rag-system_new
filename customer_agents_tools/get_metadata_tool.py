@@ -225,16 +225,22 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_date_range() -> str:
         """
-        Liefert den Zeitraum des Datensatzes.
+        Liefert den Zeitraum des Datensatzes mit Lücken-Erkennung.
 
         Returns:
-            str: Zeitraum mit Start/End-Datum, Anzahl Tage und Einträge.
-                 Format: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage, 1500 Einträge)"
+            str: Zeitraum mit Start/End-Datum, Anzahl Tage, Einträge und Lücken-Info.
+                 Format: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)"
+                 Mit Lücken: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)
+                              ⚠️ Achtung: Nicht alle Tage haben Daten! (150 Tage mit Einträgen)"
                  Bei fehlenden Daten: "Keine Datumsdaten verfügbar."
 
         Examples:
             >>> get_date_range()
-            "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage, 1500 Einträge)"
+            "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)"
+            
+            >>> get_date_range()  # Mit Lücken
+            "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)
+            ⚠️ Achtung: Nicht alle Tage haben Daten! Nur 150 von 365 Tagen haben Einträge."
         """
         if "date_str" not in df_metadata.columns:
             return "Keine Datumsdaten verfügbar."
@@ -243,11 +249,39 @@ Länder ISO-Code (4): AT, DE, FR, IT"
         if dates.empty:
             return "Keine gültigen Datumsdaten verfügbar."
 
-        date_min = dates.min()
-        date_max = dates.max()
-        total_days = (pd.to_datetime(date_max) - pd.to_datetime(date_min)).days
-
-        return f"Zeitraum: {date_min} bis {date_max} ({total_days} Tage, {len(dates)} Einträge)"
+        # Min/Max Datum
+        date_min_str = dates.min()
+        date_max_str = dates.max()
+        
+        # Parse und formatiere schön (ohne Zeitzone/Zeit wenn nicht nötig)
+        try:
+            date_min_dt = pd.to_datetime(date_min_str)
+            date_max_dt = pd.to_datetime(date_max_str)
+            
+            # Formatiere als YYYY-MM-DD (ohne Zeit)
+            date_min = date_min_dt.strftime('%Y-%m-%d')
+            date_max = date_max_dt.strftime('%Y-%m-%d')
+            
+            # Zeitspanne (Min bis Max)
+            total_days_span = (date_max_dt - date_min_dt).days + 1  # +1 weil inklusiv
+        except Exception:
+            # Fallback: Nutze Original-Strings und berechne Spanne auf 1 Tag
+            date_min = str(date_min_str)
+            date_max = str(date_max_str)
+            total_days_span = 1
+        
+        # Tatsächliche Tage mit Daten (unique dates)
+        unique_dates = pd.to_datetime(dates).dt.date.nunique()
+        
+        # Basis-Info
+        result = f"Zeitraum: {date_min} bis {date_max} ({total_days_span} Tage Spanne, {len(dates)} Einträge)"
+        
+        # Lücken-Warnung wenn nicht alle Tage Daten haben
+        coverage_percent = (unique_dates / total_days_span) * 100
+        if coverage_percent < 90:  # Weniger als 90% Coverage
+            result += f"\n⚠️ Achtung: Nicht alle Tage haben Daten! Nur {unique_dates} von {total_days_span} Tagen haben Einträge ({coverage_percent:.0f}% Abdeckung)."
+        
+        return result
 
     def get_verbatim_statistics() -> str:
         """
@@ -343,11 +377,18 @@ Länder ISO-Code (4): AT, DE, FR, IT"
             )
             lines.append(f"😊 Häufigstes Sentiment: {top_sentiment}")
 
-        # Zeitraum
+        # Zeitraum (nutze gleiche Formatierung wie get_date_range())
         if "date_str" in df_metadata.columns:
             dates = df_metadata["date_str"].dropna()
             if not dates.empty:
-                lines.append(f"📅 Zeitraum: {dates.min()} bis {dates.max()}")
+                try:
+                    date_min_dt = pd.to_datetime(dates.min())
+                    date_max_dt = pd.to_datetime(dates.max())
+                    date_min = date_min_dt.strftime('%Y-%m-%d')
+                    date_max = date_max_dt.strftime('%Y-%m-%d')
+                    lines.append(f"📅 Zeitraum: {date_min} bis {date_max}")
+                except Exception:
+                    lines.append(f"📅 Zeitraum: {dates.min()} bis {dates.max()}")
 
         lines.append("")
         lines.append("💡 Verwende die spezifischen Tools für detaillierte Analysen.")
