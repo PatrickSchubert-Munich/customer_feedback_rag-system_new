@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Streamlit Chat UI für Customer Feedback RAG System.
+Streamlit Chat UI for Customer Feedback RAG System.
 Identical functionality to app.py with clean main() structure.
 """
 
@@ -81,9 +81,12 @@ EXAMPLE_QUERIES = [
 
 def ensure_session_initialized():
     """
-    Stellt sicher, dass die Session initialisiert ist.
-    Verwendet In-Memory SQLite (:memory:) für nicht-persistente Sessions.
-    Session existiert nur während der aktuellen Browser-Session.
+    Ensures that the session is initialized.
+    Uses in-memory SQLite (:memory:) for non-persistent sessions.
+    Session exists only during the current browser session.
+    
+    Returns:
+        SQLiteSession: Initialized session object from st.session_state
     """
     if "session" not in st.session_state:
         st.session_state.session = SQLiteSession(
@@ -95,17 +98,25 @@ def ensure_session_initialized():
 
 @st.cache_data(ttl=1)  # Cache for 1 second to reduce multiple calls in same render
 def get_cached_conversation_stats():
-    """Cached wrapper für conversation stats um multiple API-Calls zu vermeiden."""
+    """
+    Cached wrapper for conversation stats to avoid multiple API calls.
+    
+    Returns:
+        dict: Dictionary containing conversation statistics
+    """
     return st.session_state.conversation.get_summary_stats()
 
 
 def render_chart(chart_path: str, size: str = "Mittel"):
     """
-    Zeigt Chart mit gewählter Größe an (Klein/Mittel/Groß).
+    Displays chart with selected size (Small/Medium/Large).
     
     Args:
-        chart_path: Pfad zum Chart
-        size: Größe ("Klein", "Mittel", "Groß")
+        chart_path (str): Path to the chart file
+        size (str): Size option ("Klein", "Mittel", "Groß"). Defaults to "Mittel"
+    
+    Returns:
+        None
     """
     # Konvertiere relativen Pfad zu absolutem Pfad
     if not os.path.isabs(chart_path):
@@ -141,17 +152,17 @@ def render_chart(chart_path: str, size: str = "Mittel"):
 
 async def stream_agent_response(customer_manager, user_input: str, session, history_limit: int):
     """
-    Async generator für echtes Token-Streaming vom Agent.
-    Streamlit konvertiert async generator automatisch zu sync!
+    Async generator for real token streaming from agent.
+    Streamlit automatically converts async generator to sync!
     
     Args:
-        customer_manager: Customer Manager Agent
-        user_input: Benutzer-Eingabe
-        session: SQLiteSession
-        history_limit: Historie-Limit
+        customer_manager (Any): Customer Manager Agent instance
+        user_input (str): User input text
+        session (SQLiteSession): SQLite session object
+        history_limit (int): History limit for conversation context
     
     Yields:
-        str: Tokens für Streamlit
+        str: Tokens for Streamlit streaming display
     """
     async for chunk in process_query_streamed(customer_manager, user_input, session, history_limit):
         if isinstance(chunk, str):
@@ -164,12 +175,18 @@ async def stream_agent_response(customer_manager, user_input: str, session, hist
 
 def process_user_query(user_input: str) -> None:
     """
-    Verarbeitet eine Benutzereingabe mit ECHTEM Token-Streaming.
-    Flow: Stream Response → Speichere in History → Streamlit rerun zeigt aus History
+    Processes a user input with REAL token streaming.
+    Flow: Stream Response → Save to History → Streamlit rerun displays from History
     
-    WICHTIG: Nachrichten werden NICHT direkt angezeigt, sondern nur zur History
-    hinzugefügt. Die Anzeige erfolgt dann aus der History beim nächsten Rerun.
-    Dies verhindert Duplikate und sorgt für korrekte Nachrichten-Reihenfolge.
+    IMPORTANT: Messages are NOT displayed directly, but only added to history.
+    Display happens from history on next rerun. This prevents duplicates and
+    ensures correct message order.
+    
+    Args:
+        user_input (str): User input text to process
+    
+    Returns:
+        None
     """
     # Ensure session is initialized
     session = ensure_session_initialized()
@@ -244,13 +261,22 @@ def process_user_query(user_input: str) -> None:
 @st.cache_resource(show_spinner=False)
 def initialize_system_cached(is_azure_openai: bool=False, csv_path: str=FILE_PATH_CSV, is_synthetic: bool=False):
     """
-    Streamlit-Wrapper für initialize_system mit Caching.
-    Ruft die Business-Logic aus helper_functions auf und fügt UI-spezifische Validierung hinzu.
+    Streamlit wrapper for initialize_system with caching.
+    Calls business logic from helper_functions and adds UI-specific validation.
     
     Args:
-        is_azure_openai: True = Azure OpenAI, False = Standard OpenAI
-        csv_path: Pfad zur CSV-Datei (Default: FILE_PATH_CSV)
-        is_synthetic: True = Synthetische Daten, False = Original-Daten
+        is_azure_openai (bool): If True uses Azure OpenAI, if False uses standard OpenAI. Defaults to False
+        csv_path (str): Path to CSV file. Defaults to FILE_PATH_CSV
+        is_synthetic (bool): If True uses synthetic data, if False uses original data. Defaults to False
+    
+    Returns:
+        tuple[Any, Any]: Tuple containing (customer_manager, collection) where:
+            - customer_manager (Any): Initialized Customer Manager Agent
+            - collection (Any): ChromaDB collection instance
+    
+    Raises:
+        ValueError: If initialization fails due to missing API keys or invalid configuration
+        FileNotFoundError: If CSV file does not exist
     """
     try:
         # Rufe die core Business-Logic auf (aus helper_functions)
@@ -283,7 +309,15 @@ def initialize_system_cached(is_azure_openai: bool=False, csv_path: str=FILE_PAT
 
 
 def main():
-    """Main Streamlit application."""
+    """
+    Main Streamlit application.
+    
+    Initializes the RAG system, handles user interactions, displays chat history,
+    and manages the overall UI flow.
+    
+    Returns:
+        None
+    """
 
     # Page config
     st.set_page_config(
