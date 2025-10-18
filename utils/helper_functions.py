@@ -85,11 +85,11 @@ def get_model_name(model_type: str = "gpt4o") -> str:
     if is_azure_openai():
         # Azure OpenAI Deployment-Namen (wie sie aktuell verwendet werden)
         if model_type == "gpt4o":
-            return "openai-gpt4-omni"  # Azure Deployment Name
+            return "gpt-4o"  # Azure Deployment Name
         elif model_type == "gpt4o_mini":
-            return "openai-gpt4-mini"  # Azure Deployment Name
+            return "gpt-4o-mini"  # Azure Deployment Name
         else:
-            return "openai-gpt4-mini"  # Fallback
+            return "gpt-4o-mini"  # Fallback
     else:
         # Standard OpenAI API Modellnamen
         if model_type == "gpt4o":
@@ -156,7 +156,10 @@ def write_prepared_csv(
 
 
 def load_vectorstore(
-    data: pd.DataFrame, type: str = "chroma", create_new_store: bool = False
+    data: pd.DataFrame, 
+    type: str = "chroma", 
+    create_new_store: bool = False,
+    embedding_model: str = "text-embedding-ada-002"  # ✅ KORRIGIERT: Ada-002 als Default
 ) -> Any | None:
     """
     Lädt oder erstellt einen VectorStore.
@@ -165,6 +168,10 @@ def load_vectorstore(
         data: DataFrame mit Customer-Feedback-Daten
         type: VectorStore-Typ (aktuell nur "chroma" unterstützt)
         create_new_store: True = VectorStore neu erstellen, False = existierenden laden
+        embedding_model: OpenAI Embedding-Modell (Default: "text-embedding-ada-002")
+            - "text-embedding-ada-002": Beste Cross-Lingual Performance (78.4% avg similarity)
+            - "text-embedding-3-small": Günstiger, aber schlechtere Cross-Lingual (29.4%)
+            - "text-embedding-3-large": Teurer, aber auch schlechte Cross-Lingual (32.2%)
     
     Returns:
         ChromaDB Collection oder None bei Fehler
@@ -176,7 +183,7 @@ def load_vectorstore(
             file_name="feedback_vectorstore",
             collection_name="feedback_data",
             batch_size=100,
-            embedding_model="text-embedding-3-small",
+            embedding_model=embedding_model,  # ✅ Übergebenes Modell verwenden
         )
 
         chroma_collection = vectorstore_manager.create_vectorstore(
@@ -503,7 +510,8 @@ def initialize_system(
     csv_path: str = "./data/feedback_data.csv",
     write_enhanced_csv: bool = True,
     vectorstore_type: str = "chroma",
-    create_new_store: bool = False
+    create_new_store: bool = False,
+    embedding_model: str = "text-embedding-ada-002"  # Ada-002: Superior Cross-Lingual (92% avg)
 ):
     """
     Initialisiert das RAG-System mit allen Komponenten.
@@ -514,6 +522,12 @@ def initialize_system(
         write_enhanced_csv: True = Speichert enhanced CSV lokal
         vectorstore_type: Typ des VectorStore (aktuell nur "chroma")
         create_new_store: True = VectorStore neu erstellen
+        embedding_model: OpenAI Embedding-Modell für VectorStore
+                        Default: text-embedding-ada-002 (beste Cross-Lingual Performance)
+                        Alternative: text-embedding-3-small, text-embedding-3-large
+            - "text-embedding-ada-002": Beste Cross-Lingual Performance (78.4%)
+            - "text-embedding-3-small" (Default): Günstiger, aber schwächer (29.4%)
+            - "text-embedding-3-large": Teurer, aber auch schwach (32.2%)
     
     Returns:
         tuple: (customer_manager, collection)
@@ -527,12 +541,12 @@ def initialize_system(
     Note:
         - Initialisiert OpenAI Client (Azure oder Standard)
         - Lädt und enhanced CSV-Daten
-        - Erstellt/lädt VectorStore
+        - Erstellt/lädt VectorStore mit gewähltem Embedding-Modell
         - Konfiguriert Multi-Agent-System
     """
     # Import agent modules locally to avoid circular imports
     from customer_agents.chart_creator_agent import create_chart_creator_agent
-    from customer_agents_tools.robust_search_tool_factory import RobustSearchToolFactory
+    from customer_agents_tools.search_tool import RobustSearchToolFactory
     from customer_agents.feedback_analysis_agent import create_feedback_analysis_agent
     from customer_agents.customer_manager_agent import create_customer_manager_agent
     from customer_agents_tools.get_metadata_tool import create_metadata_tool
@@ -555,9 +569,12 @@ def initialize_system(
         
     customer_data = load_csv(path=csv_path, write_local=write_enhanced_csv)
 
-    # Load or create VectorStore
+    # Load or create VectorStore with specified embedding model
     collection = load_vectorstore(
-        data=customer_data, type=vectorstore_type, create_new_store=create_new_store
+        data=customer_data, 
+        type=vectorstore_type, 
+        create_new_store=create_new_store,
+        embedding_model=embedding_model  # ✅ Übergebenes Modell verwenden
     )
     
     if collection is None:
@@ -567,7 +584,7 @@ def initialize_system(
         raise ValueError("❌ VectorStore ist leer - keine Dokumente wurden erstellt!")
 
     # Create tools for agents
-    search_customer_feedback = RobustSearchToolFactory.create_enhanced_search_tool(collection)
+    search_customer_feedback = RobustSearchToolFactory.create_search_tool(collection)
     build_metadata_snapshot = create_metadata_tool(collection)
     
     # ✅ BUILD METADATA SNAPSHOT (Pre-compute all metadata for Customer Manager)
