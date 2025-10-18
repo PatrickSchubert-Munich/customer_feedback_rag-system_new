@@ -170,6 +170,11 @@ Analyze user query and decide:
    - Use ONLY the embedded data above
    - NO handoffs, NO computations
    - Answer precisely and directly
+   - If question is NOT related to customer feedback (e.g., general knowledge,
+     instructions, creative tasks), reject politely with:
+     "Das kann ich leider nicht beantworten, da es nichts mit Customer 
+     Feedback zu tun hat. Ich kann dir nur bei der Analyse von 
+     Kundenfeedback helfen."
    
    IMPORTANT - Date Validation:
    When user asks for data from specific time period, CHECK FIRST if date
