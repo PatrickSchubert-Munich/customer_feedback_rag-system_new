@@ -5,13 +5,13 @@ from utils.helper_functions import get_model_name
 
 def create_chart_creator_agent(chart_creation_tool):
     """
-    Erstellt den Chart Creator Agent für Datenvisualisierungen.
+    Creates the Chart Creator Agent for data visualizations.
     
     Args:
-        chart_creation_tool: Tool für Chart-Erstellung (feedback_analytics)
+        chart_creation_tool: Tool for chart creation (feedback_analytics)
     
     Returns:
-        Agent: Konfigurierter Chart Creator Expert
+        Agent: Configured Chart Creator Expert
     """
     tools = [chart_creation_tool]
     return Agent(

@@ -9,34 +9,34 @@ def create_customer_manager_agent(
     handoff_agents: Optional[list] = None,
 ) -> Agent:
     """
-    Erstellt den Customer Manager Agent mit embedded Metadata Snapshot.
+    Creates the Customer Manager Agent with embedded metadata snapshot.
     
-    Der Customer Manager ist der zentrale Einstiegspunkt und routet Anfragen intelligent:
-    - Metadaten-Fragen: Beantwortet direkt aus embedded Snapshot (keine Tools nötig)
-    - Inhalts-Analysen: Handoff zu Feedback Analysis Expert
-    - Visualisierungen: Handoff zu Chart Creator Expert
+    The Customer Manager is the central entry point and routes requests intelligently:
+    - Metadata questions: Answers directly from embedded snapshot (no tools needed)
+    - Content analyses: Handoff to Feedback Analysis Expert
+    - Visualizations: Handoff to Chart Creator Expert
     
     Args:
-        metadata_snapshot (Dict[str, str]): Pre-computed metadata vom App-Start.
-            Erstellt via `create_metadata_tool(collection)()`.
-            Erwartete Keys:
-            - unique_markets: Kommagetrennte Markt-Liste
-            - nps_statistics: NPS-Durchschnitt, Median, Kategorien-Verteilung
-            - sentiment_statistics: Sentiment-Labels und Scores
-            - date_range: Zeitraum der Feedbacks
-            - verbatim_statistics: Token-Längen-Statistiken
-            - dataset_overview: Kompakte Gesamtübersicht
-            - total_entries: Anzahl Einträge
+        metadata_snapshot (Dict[str, str]): Pre-computed metadata from app startup.
+            Created via `create_metadata_tool(collection)()`.
+            Expected keys:
+            - unique_markets: Comma-separated market list
+            - nps_statistics: NPS average, median, category distribution
+            - sentiment_statistics: Sentiment labels and scores
+            - date_range: Time range of feedbacks
+            - verbatim_statistics: Token length statistics
+            - dataset_overview: Compact overall summary
+            - total_entries: Number of entries
             
-        handoff_agents (Optional[list]): Liste der Specialist Agents für Handoffs.
-            Typischerweise: [Feedback Analysis Expert, Chart Creator Expert]
+        handoff_agents (Optional[list]): List of specialist agents for handoffs.
+            Typically: [Feedback Analysis Expert, Chart Creator Expert]
             Default: []
 
     Returns:
-        Agent: Konfigurierter Customer Manager mit embedded Metadaten.
-            - Keine Tools (alles ist im Snapshot)
-            - Handoffs zu Specialist Agents
-            - Direkte Metadaten-Antworten ohne Runtime-Tool-Calls
+        Agent: Configured Customer Manager with embedded metadata.
+            - No tools (everything is in snapshot)
+            - Handoffs to specialist agents
+            - Direct metadata answers without runtime tool calls
     
     Examples:
         >>> snapshot = build_metadata_snapshot()
@@ -51,7 +51,7 @@ def create_customer_manager_agent(
         # Convert to list to satisfy type requirements
         handoff_agents = list(handoff_agents)
 
-    # ✅ DYNAMISCHE AGENT-ERKENNUNG: Baue Liste der verfügbaren Specialist Agents
+    # ✅ DYNAMIC AGENT DETECTION: Build list of available specialist agents
     available_agents = []
     agent_capabilities = {}
     
@@ -59,7 +59,7 @@ def create_customer_manager_agent(
         agent_name = agent.name
         available_agents.append(agent_name)
         
-        # Erkenne Agent-Typ anhand des Namens und definiere Capabilities
+        # Detect agent type from name and define capabilities
         if "Chart Creator" in agent_name or "chart" in agent_name.lower():
             agent_capabilities[agent_name] = {
                 "type": "visualization",
@@ -76,13 +76,13 @@ def create_customer_manager_agent(
                 "description": "Formatiert technische Analysen als Business-Reports"
             }
         else:
-            # Fallback für unbekannte Agents
+            # Fallback for unknown agents
             agent_capabilities[agent_name] = {
                 "type": "unknown",
                 "description": "Specialist Agent"
             }
     
-    # Baue dynamische Agent-Liste für Instructions
+    # Build dynamic agent list for instructions
     agents_info = "\n".join([
         f"   • {name}: {caps['description']}"
         for name, caps in agent_capabilities.items()

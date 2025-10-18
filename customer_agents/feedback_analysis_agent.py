@@ -5,14 +5,14 @@ from utils.helper_functions import get_model_name
 
 def create_feedback_analysis_agent(search_tool, handoff_agents: list = []):
     """
-    Erstellt den Feedback Analysis Agent für inhaltliche Feedback-Analysen.
+    Creates the Feedback Analysis Agent for content-based feedback analyses.
     
     Args:
-        search_tool: Tool für semantische Feedback-Suche (search_customer_feedback)
-        handoff_agents: Liste der Handoff-Ziele (Output Summarizer)
+        search_tool: Tool for semantic feedback search (search_customer_feedback)
+        handoff_agents: List of handoff targets (Output Summarizer)
     
     Returns:
-        Agent: Konfigurierter Feedback Analysis Expert
+        Agent: Configured Feedback Analysis Expert
     """
     tools = [search_tool]
     return Agent(

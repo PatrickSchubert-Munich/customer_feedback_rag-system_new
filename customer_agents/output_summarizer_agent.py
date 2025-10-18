@@ -4,10 +4,10 @@ from utils.helper_functions import get_model_name
 
 def create_output_summarizer_agent():
     """
-    Erstellt den Output Summarizer Agent für Business-Reports.
+    Creates the Output Summarizer Agent for business reports.
     
     Returns:
-        Agent: Konfigurierter Output Summarizer Expert
+        Agent: Configured Output Summarizer Expert
     """
 
     return Agent(
