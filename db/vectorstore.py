@@ -13,9 +13,9 @@ class VectorStore(ABC):
     must follow for creating and managing document embeddings.
     """
 
-    # Embedding-Dimensionen basierend auf Modell
+    # Embedding-Dimensionen basierend auf Modell (OpenAI Standard-Dimensionen)
     _MODEL_DIMENSIONS = {
-        "text-embedding-3-small": 384,
+        "text-embedding-3-small": 1536,  # Korrekt: 1536 Dimensionen (vorher fälschlicherweise 384)
         "text-embedding-ada-002": 1536,
         "text-embedding-3-large": 3072,
     }
