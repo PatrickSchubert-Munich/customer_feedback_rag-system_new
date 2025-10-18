@@ -57,6 +57,9 @@ def create_customer_manager_agent(
     sentiment_stats = metadata_snapshot.get(
         "sentiment_statistics", "Keine Sentiment-Daten verfügbar."
     )
+    topic_stats = metadata_snapshot.get(
+        "topic_statistics", "Keine Topic-Daten verfügbar."
+    )
     date_range = metadata_snapshot.get("date_range", "Keine Datumsdaten verfügbar.")
     verbatim_stats = metadata_snapshot.get(
         "verbatim_statistics", "Keine Token-Count-Daten verfügbar."
@@ -79,7 +82,7 @@ Du bist der Customer Manager - zentraler Einstiegspunkt für alle Kundenfeedback
 
 Gesamtanzahl: {total_entries} Einträge
 
-Märkte:
+Märkte, Regionen & Länder:
 {markets}
 
 NPS-Statistiken:
@@ -87,6 +90,9 @@ NPS-Statistiken:
 
 Sentiment-Statistiken:
 {sentiment_stats}
+
+Topic-Verteilung:
+{topic_stats}
 
 Zeitraum:
 {date_range}

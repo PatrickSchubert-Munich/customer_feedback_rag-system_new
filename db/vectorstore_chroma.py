@@ -11,7 +11,33 @@ from db.vectorstore import VectorStore
 
 
 class ChromaVectorStore(VectorStore):
-    """Chroma VectorStore für Customer Feedback mit optimiertem Chunking."""
+    """
+    Chroma VectorStore für Customer Feedback mit optimiertem Chunking.
+    
+    Features:
+    - Intelligentes Text-Chunking basierend auf Feedback-Länge
+    - Umfassende Metadaten für präzise Filterung
+    - Support für Azure OpenAI und Standard OpenAI
+    - Persistente Speicherung mit ChromaDB
+    
+    Metadaten pro Dokument:
+    - row_id: Zeilen-ID im DataFrame
+    - nps: Net Promoter Score (0-10)
+    - nps_category: Detractor/Passive/Promoter
+    - market: Market-ID (z.B. "C1-DE")
+    - region: Business-Region (z.B. "C1", "CE")
+    - country: ISO 3166-1 Alpha-2 Ländercode (z.B. "DE", "IT")
+    - date: Unix Timestamp
+    - date_str: Datum als String
+    - sentiment_label: positiv/neutral/negativ
+    - sentiment_score: Sentiment-Confidence (-1.0 bis 1.0)
+    - topic: Topic-Kategorie (z.B. "Service", "Lieferproblem")
+    - topic_confidence: Topic-Confidence (0.0 bis 1.0)
+    - verbatim_token_count: Token-Anzahl des Feedbacks
+    - chunk_index: Index des aktuellen Chunks
+    - total_chunks: Gesamtzahl der Chunks für dieses Feedback
+    - verbatim_preview: Erste 100 Zeichen (für Debugging)
+    """
 
     def __init__(
         self,
@@ -98,7 +124,31 @@ class ChromaVectorStore(VectorStore):
     def _prepare_metadata(
         self, row: pd.Series, idx: int, chunk_idx: int, total_chunks: int
     ) -> dict:
-        """Bereitet Metadaten für ChromaDB vor."""
+        """
+        Bereitet umfassende Metadaten für ChromaDB vor.
+        
+        Args:
+            row: DataFrame-Zeile mit Feedback-Daten
+            idx: Zeilen-Index
+            chunk_idx: Index des aktuellen Chunks
+            total_chunks: Gesamtzahl der Chunks
+        
+        Returns:
+            dict: Validierte Metadaten mit folgenden Keys:
+                - row_id, nps, market (immer vorhanden)
+                - region, country (wenn Market gesplittet wurde)
+                - nps_category (wenn klassifiziert)
+                - sentiment_label, sentiment_score (wenn analysiert)
+                - topic, topic_confidence (wenn klassifiziert)
+                - date, date_str (wenn vorhanden)
+                - verbatim_token_count (wenn berechnet)
+                - chunk_index, total_chunks (Chunking-Info)
+                - verbatim_preview (erste 100 Zeichen)
+        
+        Note:
+            Alle Werte werden auf ChromaDB-kompatible Typen validiert
+            (str, int, float, bool)
+        """
         # Sichere Datentyp-Konvertierungen
         metadata = {
             "row_id": int(idx),
@@ -143,6 +193,24 @@ class ChromaVectorStore(VectorStore):
             row["verbatim_token_count"]
         ):
             metadata["verbatim_token_count"] = int(row["verbatim_token_count"])
+
+        # Optional: Topic Classification
+        if "topic" in row.index and pd.notna(row["topic"]):
+            metadata["topic"] = str(row["topic"])
+
+        if "topic_confidence" in row.index and pd.notna(row["topic_confidence"]):
+            try:
+                metadata["topic_confidence"] = float(row["topic_confidence"])
+            except (ValueError, TypeError):
+                metadata["topic_confidence"] = 0.0
+
+        # Optional: Region (from Market split)
+        if "region" in row.index and pd.notna(row["region"]):
+            metadata["region"] = str(row["region"])
+
+        # Optional: Country (ISO format from Market split)
+        if "country" in row.index and pd.notna(row["country"]):
+            metadata["country"] = str(row["country"])
 
         # Hilfreich für Debugging: Preview des Original-Feedbacks
         metadata["verbatim_preview"] = str(row["Verbatim"])[:100]
@@ -323,10 +391,11 @@ class ChromaVectorStore(VectorStore):
             # Dokumente vorbereiten
             documents, metadatas, ids = self.split_and_chunk_text()
 
-            # Collection erstellen
+            # Collection erstellen mit expliziter Cosine-Metric
             collection = self._chroma_client.create_collection(
                 name=self.collection_name,
                 embedding_function=cast(Any, self._embedding_function),
+                metadata={"hnsw:space": "cosine"}  # Explizit Cosine Distance für OpenAI Embeddings
             )
 
             # Batch-Processing für große Datenmengen

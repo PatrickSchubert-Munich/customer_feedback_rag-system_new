@@ -55,8 +55,11 @@ def create_chart_creation_tool(collection: Chroma):
         analysis_type: str = "sentiment_chart",
         query: str = "",
         market_filter: Optional[str] = None,
+        region_filter: Optional[str] = None,
+        country_filter: Optional[str] = None,
         sentiment_filter: Optional[str] = None,
         nps_filter: Optional[str] = None,
+        topic_filter: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
     ) -> str:
@@ -78,11 +81,20 @@ def create_chart_creation_tool(collection: Chroma):
             market_filter (str, optional): Markt-Filter (z.B. "C1-DE"). 
                 None = alle Märkte. Default: None
             
+            region_filter (str, optional): Regions-Filter (z.B. "C1", "CE"). 
+                None = alle Regionen. Default: None
+            
+            country_filter (str, optional): Länder-Filter (ISO-Code z.B. "DE", "IT"). 
+                None = alle Länder. Default: None
+            
             sentiment_filter (str, optional): Sentiment-Filter 
                 ("positiv"/"negativ"/"neutral"). Default: None
             
             nps_filter (str, optional): NPS-Kategorie 
                 ("Promoter"/"Passive"/"Detractor"). Default: None
+            
+            topic_filter (str, optional): Topic-Filter 
+                (z.B. "Service", "Lieferproblem", "Produktqualität"). Default: None
             
             date_from (str, optional): Start-Datum "YYYY-MM-DD". Default: None
             date_to (str, optional): End-Datum "YYYY-MM-DD". Default: None
@@ -138,6 +150,19 @@ def create_chart_creation_tool(collection: Chroma):
                 traceback.print_exc()
                 sys.stdout.flush()
                 return error_msg
+
+            # ✅ INFO: Warnung bei komplett leeren Parametern
+            if (not query.strip() and 
+                not market_filter and not region_filter and not country_filter and
+                not sentiment_filter and not nps_filter and not topic_filter and
+                not date_from and not date_to):
+                print("\n📊 INFO: Keine spezifischen Filter gesetzt - erstelle Chart über ALLE Daten")
+                print("   💡 Tipp: Für fokussiertere Analysen können Filter verwendet werden:")
+                print("      • market_filter, region_filter, country_filter (geografisch)")
+                print("      • sentiment_filter, nps_filter, topic_filter (analytisch)")
+                print("      • date_from, date_to (zeitlich)")
+                print("      • query (semantische Filterung)\n")
+                sys.stdout.flush()
 
             # ✅ Validierung: analysis_type mit FALLBACK
             valid_types = [
@@ -216,7 +241,8 @@ def create_chart_creation_tool(collection: Chroma):
             sys.stdout.flush()
 
             data = _get_filtered_data(
-                collection, query, market_filter, sentiment_filter, nps_filter, date_from, date_to
+                collection, query, market_filter, region_filter, country_filter,
+                sentiment_filter, nps_filter, topic_filter, date_from, date_to
             )
 
             if not data["documents"]:
@@ -369,19 +395,30 @@ def _get_filtered_data(
     collection: Chroma,
     query: str,
     market_filter: Optional[str],
+    region_filter: Optional[str],
+    country_filter: Optional[str],
     sentiment_filter: Optional[str],
     nps_filter: Optional[str],
+    topic_filter: Optional[str],
     date_from: Optional[str],
     date_to: Optional[str],
 ) -> Dict:
     """
     Holt gefilterte Daten aus Collection mit erweiterten Filtern.
+    
+    Unterstützt Filterung nach:
+    - Market, Region, Country (geografisch)
+    - Sentiment, NPS, Topic (analytisch)
+    - Datum (zeitlich)
     """
     try:
         print("   🔍 Filter-Setup:")
         print(f"      • Market: {market_filter}")
+        print(f"      • Region: {region_filter}")
+        print(f"      • Country: {country_filter}")
         print(f"      • Sentiment: {sentiment_filter}")
         print(f"      • NPS: {nps_filter}")
+        print(f"      • Topic: {topic_filter}")
         print(f"      • Date From: {date_from}")
         print(f"      • Date To: {date_to}")
         print(f"      • Query: '{query}'")
@@ -393,11 +430,20 @@ def _get_filtered_data(
         if market_filter:
             where_filter["market"] = {"$eq": market_filter}
 
+        if region_filter:
+            where_filter["region"] = {"$eq": region_filter}
+
+        if country_filter:
+            where_filter["country"] = {"$eq": country_filter}
+
         if sentiment_filter:
             where_filter["sentiment_label"] = {"$eq": sentiment_filter.lower()}
         
         if nps_filter:
             where_filter["nps_category"] = {"$eq": nps_filter}
+        
+        if topic_filter:
+            where_filter["topic"] = {"$eq": topic_filter}
         
         # Date range filtering - build separate conditions for ChromaDB
         date_conditions = []
@@ -464,8 +510,14 @@ def _get_filtered_data(
             print("   📚 Führe get() aus (keine query)...")
             sys.stdout.flush()
 
+            # Warnung wenn keine Filter gesetzt sind
+            if where_filter is None:
+                print("   ℹ️ INFO: Keine Filter gesetzt - hole alle verfügbaren Daten")
+                sys.stdout.flush()
+            
             result: Any = collection.get(
-                where=where_filter, include=["documents", "metadatas"]  # type: ignore[arg-type]
+                where=where_filter,  # type: ignore[arg-type]
+                include=["documents", "metadatas"]
             )
             documents = result.get("documents", [])
             metadatas = result.get("metadatas", [])

@@ -56,20 +56,54 @@ def create_metadata_tool(collection):
     
     def get_unique_markets() -> str:
         """
-        Liefert alle verfügbaren Märkte im Datensatz.
+        Liefert alle verfügbaren Märkte, Regionen und Länder im Datensatz.
 
         Returns:
-            str: Kommagetrennte Liste der Märkte (z.B. "C1-DE, C2-AT, C3-CH")
-                 oder "Keine Marktdaten verfügbar." bei fehlenden Daten
+            str: Strukturierte Auflistung von:
+                - Märkte: Vollständige Market-IDs (z.B. "C1-DE, C1-FR, CE-IT, ...")
+                - Regionen: Business-Regionen-Codes (z.B. "C1, C3, C5, CE, IT, ...")
+                - Länder: ISO 3166-1 Alpha-2 Ländercodes (z.B. "AT, DE, FR, IT, ...")
+                oder "Keine Marktdaten verfügbar." bei fehlenden Daten
 
         Examples:
             >>> get_unique_markets()
-            "C1-DE, C2-AT, C2-US, C3-CH"
+            "Märkte (5): C1-DE, C1-FR, CE-IT, C3-AT, IT-IT\\n\
+Regionen (4): C1, C3, CE, IT\\n\
+Länder ISO-Code (4): AT, DE, FR, IT"
+        
+        Notes:
+            - Märkte werden am "-" gesplittet in Region (links) und Country (rechts)
+            - Regionen sind Business-spezifische Codes (nicht geografisch)
+            - Länder folgen ISO 3166-1 Alpha-2 Standard (2-Buchstaben-Codes)
         """
+        lines = []
+        
+        # Märkte
         if "market" in df_metadata.columns:
             unique_markets = sorted(df_metadata["market"].dropna().unique())
-            return ", ".join(unique_markets)
-        return "Keine Marktdaten verfügbar."
+            market_count = len(unique_markets)
+            lines.append(f"Märkte ({market_count}): {', '.join(unique_markets)}")
+        
+        # Regionen
+        if "region" in df_metadata.columns:
+            unique_regions = sorted(df_metadata["region"].dropna().unique())
+            # Filtere UNKNOWN heraus
+            unique_regions = [r for r in unique_regions if r != "UNKNOWN"]
+            region_count = len(unique_regions)
+            lines.append(f"Regionen ({region_count}): {', '.join(unique_regions)}")
+        
+        # Länder (ISO-Format)
+        if "country" in df_metadata.columns:
+            unique_countries = sorted(df_metadata["country"].dropna().unique())
+            # Filtere UNKNOWN heraus
+            unique_countries = [c for c in unique_countries if c != "UNKNOWN"]
+            country_count = len(unique_countries)
+            lines.append(f"Länder ISO-Code ({country_count}): {', '.join(unique_countries)}")
+        
+        if not lines:
+            return "Keine Marktdaten verfügbar."
+        
+        return "\n".join(lines)
 
     def get_nps_statistics() -> str:
         """
@@ -154,6 +188,40 @@ def create_metadata_tool(collection):
             )
 
         return "\n".join(lines) if lines else "Keine Sentiment-Daten verfügbar."
+
+    def get_topic_statistics() -> str:
+        """
+        Liefert Topic-Klassifizierungs-Statistiken des Datensatzes.
+
+        Returns:
+            str: Multi-Line String mit:
+                - Topic-Verteilung (mit Prozenten)
+                - Durchschnittliche Confidence-Scores pro Topic
+                Bei fehlenden Daten: "Keine Topic-Daten verfügbar."
+
+        Examples:
+            >>> get_topic_statistics()
+            "Topic-Verteilung (1500 Einträge):\\n• Service: 450 (30.0%, Ø Confidence: 0.85)\\n..."
+        """
+        lines = []
+
+        # Topic Labels
+        if "topic" in df_metadata.columns:
+            topic_counts = df_metadata["topic"].value_counts()
+            total_topics = len(df_metadata["topic"].dropna())
+            lines.append(f"Topic-Verteilung ({total_topics} Einträge):")
+            
+            for topic, count in topic_counts.items():
+                percentage = (count / total_topics) * 100
+                
+                # Durchschnittliche Confidence für dieses Topic berechnen
+                if "topic_confidence" in df_metadata.columns:
+                    avg_confidence = df_metadata[df_metadata["topic"] == topic]["topic_confidence"].mean()
+                    lines.append(f"• {topic}: {count} ({percentage:.1f}%, Ø Confidence: {avg_confidence:.2f})")
+                else:
+                    lines.append(f"• {topic}: {count} ({percentage:.1f}%)")
+
+        return "\n".join(lines) if lines else "Keine Topic-Daten verfügbar."
 
     def get_date_range() -> str:
         """
@@ -387,12 +455,14 @@ def create_metadata_tool(collection):
         Returns:
             dict: Snapshot mit allen Metadaten-Werten als formatierte Strings
                 Keys: unique_markets, nps_statistics, sentiment_statistics,
-                      date_range, verbatim_statistics, dataset_overview, total_entries
+                      topic_statistics, date_range, verbatim_statistics, 
+                      dataset_overview, total_entries
         """
         return {
             "unique_markets": get_unique_markets(),
             "nps_statistics": get_nps_statistics(),
             "sentiment_statistics": get_sentiment_statistics(),
+            "topic_statistics": get_topic_statistics(),
             "date_range": get_date_range(),
             "verbatim_statistics": get_verbatim_statistics(),
             "dataset_overview": get_dataset_overview(),

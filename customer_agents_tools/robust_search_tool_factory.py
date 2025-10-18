@@ -4,11 +4,11 @@ from agents import function_tool
 class RobustSearchToolFactory:
     """Verbesserte Search Tool Factory mit erweiterten Error Handling für LLM Feedback"""
 
-    # Confidence Thresholds für Semantic Search Quality
+    # Confidence Thresholds für Semantic Search Quality (verschärft für höhere Präzision)
     CONFIDENCE_THRESHOLDS = {
-        "REJECT": 0.40,      # Unter diesem Wert: Keine Ergebnisse
-        "LOW": 0.60,         # Unter diesem Wert: Warnung
-        "MEDIUM": 0.75,      # Gute Qualität
+        "REJECT": 0.50,      # Unter diesem Wert: Keine Ergebnisse (vorher: 0.40)
+        "LOW": 0.65,         # Unter diesem Wert: Warnung (vorher: 0.60)
+        "MEDIUM": 0.80,      # Gute Qualität (vorher: 0.75)
     }
 
     @staticmethod
@@ -29,7 +29,14 @@ class RobustSearchToolFactory:
             Returns:
                 str: Formatierte Ergebnisse mit Confidence-Bewertung oder Fehlermeldung.
                     Format: "[CONFIDENCE]\n[RESULTS]\n[SUMMARY]"
-                    - Bei Erfolg: Liste von Feedbacks mit Metadaten (market, nps, sentiment)
+                    - Bei Erfolg: Liste von Feedbacks mit Metadaten:
+                      * market: Market-ID (z.B. "C1-DE")
+                      * region: Business-Region (z.B. "C1", "CE")
+                      * country: ISO Ländercode (z.B. "DE", "IT")
+                      * nps: Net Promoter Score (0-10)
+                      * nps_category: Detractor/Passive/Promoter
+                      * sentiment_label: positiv/neutral/negativ
+                      * topic: Topic-Kategorie (z.B. "Service", "Lieferproblem")
                     - Bei Fehler: Detaillierte Fehlermeldung mit Lösungsvorschlägen
                     - Bei niedriger Confidence: Warnung über eingeschränkte Relevanz
 
@@ -169,9 +176,12 @@ Bitte prüfen Sie die Relevanz der einzelnen Feedbacks kritisch.
                         # Highlight important metadata
                         important_fields = [
                             "market",
+                            "region",
+                            "country",
                             "nps",
                             "nps_category",
                             "sentiment_label",
+                            "topic",
                         ]
                         meta_summary = []
                         for field in important_fields:

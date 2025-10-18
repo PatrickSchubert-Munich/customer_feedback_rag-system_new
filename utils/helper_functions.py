@@ -61,7 +61,8 @@ def load_csv(path: str, write_local: bool = False) -> pd.DataFrame:
         data=df,
         nps_category_col_name="NPS",
         feedback_col_name="Verbatim",
-        feedback_token_model=get_model_name("gpt4o_mini"),
+        market_col_name="Market",
+        feedback_token_model=get_model_name("gpt4o_mini")
     )
 
     df = customer_data.data

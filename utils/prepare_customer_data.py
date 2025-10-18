@@ -14,6 +14,7 @@ class PrepareCustomerData(object):
     - Token count calculation for feedback texts
     - Sentiment analysis using VADER sentiment analyzer
     - Topic classification using keyword matching
+    - Market split into region and country code (ISO format)
     
     All features are applied automatically to streamline the data preparation pipeline.
     """
@@ -24,6 +25,7 @@ class PrepareCustomerData(object):
         nps_category_col_name: str = "NPS",
         feedback_col_name: str = "Verbatim",
         feedback_token_model: str = "gpt-4o-mini",
+        market_col_name: str = "Market",
     ):
         """
         Initialize the PrepareCustomerData processor and automatically enhance the data.
@@ -33,6 +35,7 @@ class PrepareCustomerData(object):
             nps_category_col_name (str, optional): Column name containing NPS scores. Defaults to "NPS".
             feedback_col_name (str, optional): Column name containing feedback text. Defaults to "Verbatim".
             feedback_token_model (str, optional): OpenAI model for token encoding. Defaults to "gpt-4o-mini".
+            market_col_name (str, optional): Column name containing market information. Defaults to "Market".
 
         Raises:
             ValueError: If required columns are not found in the DataFrame.
@@ -41,6 +44,7 @@ class PrepareCustomerData(object):
         self.nps_category_col_name = nps_category_col_name
         self.feedback_col_name = feedback_col_name
         self.feedback_token_model = feedback_token_model
+        self.market_col_name = market_col_name
 
         # Validierung der DataFrame-Spalten
         if nps_category_col_name not in data.columns:
@@ -51,10 +55,15 @@ class PrepareCustomerData(object):
             raise ValueError(
                 f"Feedback column '{feedback_col_name}' not found in DataFrame"
             )
+        if market_col_name not in data.columns:
+            raise ValueError(
+                f"Market column '{market_col_name}' not found in DataFrame"
+            )
 
         # Führe alle Enhancements automatisch aus
         print("\n🔧 Starte Data Enhancement Pipeline...")
         self.categorize_nps_score()
+        self.split_market_column()
         self.calculate_feedback_context_length()
         self.sentiment_analysis()
         self.classify_topics()
@@ -98,6 +107,78 @@ class PrepareCustomerData(object):
         self.data["nps_category"] = self.data[self.nps_category_col_name].apply(
             categorize_single_score
         )
+        return self.data
+
+    def split_market_column(self) -> pd.DataFrame:
+        """
+        Split the Market column into Region and Country (ISO format).
+
+        This method splits market identifiers (e.g., "C1-DE", "CE-IT") into:
+        - Region: The prefix before the dash (e.g., "C1", "CE", "IT")
+        - Country: The ISO country code after the dash (e.g., "DE", "IT", "FR")
+
+        Creates two new columns:
+        - 'region': Business region identifier
+        - 'country': ISO 3166-1 alpha-2 country code
+
+        Returns:
+            pd.DataFrame: Updated DataFrame with 'region' and 'country' columns
+
+        Note:
+            - Handles missing or malformed market values gracefully
+            - If no dash is found, treats entire value as region with empty country
+            - Modifies self.data in-place by adding region and country columns
+        """
+
+        def split_market(market_value):
+            if pd.isna(market_value) or not isinstance(market_value, str):
+                return {"region": "UNKNOWN", "country": "UNKNOWN"}
+
+            try:
+                # Split am Bindestrich
+                parts = market_value.split("-")
+                
+                if len(parts) == 2:
+                    return {
+                        "region": parts[0].strip().upper(),
+                        "country": parts[1].strip().upper()
+                    }
+                elif len(parts) == 1:
+                    # Kein Bindestrich gefunden - gesamter Wert ist Region
+                    return {
+                        "region": parts[0].strip().upper(),
+                        "country": "UNKNOWN"
+                    }
+                else:
+                    # Mehr als ein Bindestrich - nimm ersten und letzten Teil
+                    return {
+                        "region": parts[0].strip().upper(),
+                        "country": parts[-1].strip().upper()
+                    }
+            except Exception:
+                return {"region": "UNKNOWN", "country": "UNKNOWN"}
+
+        # Market für jede Zeile aufteilen
+        print("🌍 Splitte Market in Region und Country...")
+        market_results = self.data[self.market_col_name].apply(split_market)
+
+        # Ergebnisse in separate Spalten aufteilen
+        self.data["region"] = market_results.apply(lambda x: x["region"])
+        self.data["country"] = market_results.apply(lambda x: x["country"])
+
+        # Statistiken ausgeben
+        unique_regions = self.data["region"].nunique()
+        unique_countries = self.data["country"].nunique()
+        print(f"   • Gefundene Regionen: {unique_regions}")
+        print(f"   • Gefundene Länder: {unique_countries}")
+        
+        # Top Regionen und Länder anzeigen
+        top_regions = self.data["region"].value_counts().head(5)
+        print(f"   • Top Regionen: {', '.join(top_regions.index.tolist())}")
+        
+        top_countries = self.data["country"].value_counts().head(5)
+        print(f"   • Top Länder: {', '.join(top_countries.index.tolist())}")
+
         return self.data
 
     def calculate_feedback_context_length(self) -> pd.DataFrame:
