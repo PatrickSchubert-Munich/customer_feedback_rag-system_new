@@ -2,84 +2,63 @@
 import pandas as pd
 import tiktoken
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from utils.topic_keywords import classify_feedback_topic
+from .topic_keywords import classify_feedback_topic
 
 
 class PrepareCustomerData(object):
     """
     A comprehensive data preparation class for customer feedback analysis.
 
-    This class provides functionality to enhance customer feedback data with:
+    This class automatically enhances customer feedback data with:
     - NPS score categorization (Detractor, Passive, Promoter)
     - Token count calculation for feedback texts
-    - Sentiment analysis using Hugging Face transformers
+    - Sentiment analysis using VADER sentiment analyzer
+    - Topic classification using keyword matching
+    
+    All features are applied automatically to streamline the data preparation pipeline.
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
-        nps_category: bool = False,
         nps_category_col_name: str = "NPS",
-        feedback_length: bool = False,
-        feedback_token_model: str = "gpt-4o-mini",
         feedback_col_name: str = "Verbatim",
-        sentiment_analysis: bool = False,
-        sentiment_col_name: str = "Verbatim",
-        topic_classification: bool = False,
-        topic_col_name: str = "Verbatim",
+        feedback_token_model: str = "gpt-4o-mini",
     ):
         """
-        Initialize the PrepareCustomerData processor with optional data enhancement features.
+        Initialize the PrepareCustomerData processor and automatically enhance the data.
 
         Args:
             data (pd.DataFrame): Input DataFrame containing customer feedback data
-            nps_category (bool, optional): Enable NPS score categorization. Defaults to False.
             nps_category_col_name (str, optional): Column name containing NPS scores. Defaults to "NPS".
-            feedback_length (bool, optional): Enable token count calculation. Defaults to False.
-            feedback_token_model (str, optional): OpenAI model for token encoding. Defaults to "gpt-4o-mini".
             feedback_col_name (str, optional): Column name containing feedback text. Defaults to "Verbatim".
-            sentiment_analysis (bool, optional): Enable sentiment analysis. Defaults to False.
-            sentiment_col_name (str, optional): Column name for sentiment analysis. Defaults to "Verbatim".
-            topic_classification (bool, optional): Enable topic classification. Defaults to False.
-            topic_col_name (str, optional): Column name for topic classification. Defaults to "Verbatim".
+            feedback_token_model (str, optional): OpenAI model for token encoding. Defaults to "gpt-4o-mini".
 
         Raises:
-            ValueError: If required columns are not found in the DataFrame when corresponding features are enabled.
+            ValueError: If required columns are not found in the DataFrame.
         """
         self.data = data
+        self.nps_category_col_name = nps_category_col_name
+        self.feedback_col_name = feedback_col_name
+        self.feedback_token_model = feedback_token_model
 
         # Validierung der DataFrame-Spalten
-        if nps_category and nps_category_col_name not in data.columns:
+        if nps_category_col_name not in data.columns:
             raise ValueError(
                 f"NPS column '{nps_category_col_name}' not found in DataFrame"
             )
-        if feedback_length and feedback_col_name not in data.columns:
+        if feedback_col_name not in data.columns:
             raise ValueError(
                 f"Feedback column '{feedback_col_name}' not found in DataFrame"
             )
-        if sentiment_analysis and sentiment_col_name not in data.columns:
-            raise ValueError(
-                f"Sentiment column '{sentiment_col_name}' not found in DataFrame"
-            )
-        if topic_classification and topic_col_name not in data.columns:
-            raise ValueError(
-                f"Topic column '{topic_col_name}' not found in DataFrame"
-            )
 
-        # Bearbeitung
-        if nps_category:
-            self.nps_category_col_name = nps_category_col_name
-            self.categorize_nps_score()
-        if feedback_length:
-            self.feedback_col_name = feedback_col_name
-            self.feedback_token_model = feedback_token_model
-            self.calculate_feedback_context_length()
-        if sentiment_analysis:
-            self.sentiment_col_name = sentiment_col_name
-            self.sentiment_analysis()
-        if topic_classification:
-            self.topic_col_name = topic_col_name
-            self.classify_topics()
+        # Führe alle Enhancements automatisch aus
+        print("\n🔧 Starte Data Enhancement Pipeline...")
+        self.categorize_nps_score()
+        self.calculate_feedback_context_length()
+        self.sentiment_analysis()
+        self.classify_topics()
+        print("✅ Data Enhancement abgeschlossen!\n")
 
     def categorize_nps_score(self) -> pd.DataFrame:
         """
@@ -168,26 +147,20 @@ class PrepareCustomerData(object):
 
     def sentiment_analysis(self) -> pd.DataFrame:
         """
-        Perform sentiment analysis on text data using Hugging Face transformers.
+        Perform sentiment analysis on text data using VADER sentiment analyzer.
 
-        This method uses a pre-trained transformer model to analyze sentiment
-        and provides both categorical labels and confidence scores. The pipeline
-        is created once for efficiency across all text entries.
-
-        Args:
-            Uses self.sentiment_col_name (str): Column name containing text for sentiment analysis
+        This method uses VADER to analyze sentiment and provides both categorical 
+        labels and confidence scores.
 
         Returns:
             pd.DataFrame: Updated DataFrame with two new columns:
                 - 'sentiment_label': Categorical sentiment (e.g., "positiv", "negativ", "neutral")
-                - 'sentiment_score': Confidence score (float between 0.0 and 1.0)
+                - 'sentiment_score': Confidence score (float between -1.0 and 1.0)
 
         Note:
-            - Creates sentiment pipeline once for optimal performance
             - Handles NaN values and non-string data by returning "UNKNOWN" label
             - Returns "ERROR" label for processing exceptions
             - Modifies self.data in-place by adding sentiment columns
-            - Common labels include: "positiv", "negativ", "neutral" (model-dependent)
         """
         analyzer = SentimentIntensityAnalyzer()
 
@@ -215,7 +188,7 @@ class PrepareCustomerData(object):
                 return {"label": "ERROR", "sentiment_score": 0.0}
 
         # Sentiment für jede Zeile analysieren
-        sentiment_results = self.data[self.sentiment_col_name].apply(analyze_row)
+        sentiment_results = self.data[self.feedback_col_name].apply(analyze_row)
 
         # Ergebnisse in separate Spalten aufteilen
         self.data["sentiment_label"] = sentiment_results.apply(lambda x: x["label"])
@@ -231,9 +204,6 @@ class PrepareCustomerData(object):
 
         Diese Methode verwendet die topic_keywords.py Logik um jeden Feedback-Text
         einer Kategorie zuzuordnen (z.B. "Lieferproblem", "Service", "Produktqualität").
-
-        Args:
-            Uses self.topic_col_name (str): Column name containing text for topic classification
 
         Returns:
             pd.DataFrame: Updated DataFrame with two new columns:
@@ -258,7 +228,7 @@ class PrepareCustomerData(object):
 
         # Topic für jede Zeile klassifizieren
         print("\n🔍 Klassifiziere Topics...")
-        topic_results = self.data[self.topic_col_name].apply(classify_row)
+        topic_results = self.data[self.feedback_col_name].apply(classify_row)
 
         # Ergebnisse in separate Spalten aufteilen
         self.data["topic"] = topic_results.apply(lambda x: x["topic"])

@@ -56,16 +56,12 @@ def load_csv(path: str, write_local: bool = False) -> pd.DataFrame:
     csv_loader = CSVloader(path=path, encoding="utf-8")
     df = csv_loader.load_csv()
 
-    # Prepare DataFrame with additional features
+    # Prepare DataFrame with all enhancement features (automatic)
     customer_data = PrepareCustomerData(
         data=df,
-        nps_category=True,
         nps_category_col_name="NPS",
-        feedback_length=True,
-        feedback_token_model=get_model_name("gpt4o_mini"),
         feedback_col_name="Verbatim",
-        sentiment_analysis=True,
-        sentiment_col_name="Verbatim",
+        feedback_token_model=get_model_name("gpt4o_mini"),
     )
 
     df = customer_data.data
