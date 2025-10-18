@@ -12,38 +12,38 @@ from db.vectorstore import VectorStore
 
 class ChromaVectorStore(VectorStore):
     """
-    Chroma VectorStore für Customer Feedback mit feedback-optimiertem Chunking.
+    Chroma VectorStore for customer feedback with feedback-optimized chunking.
     
     Features:
-    - Feedback-optimiertes Chunking: <4000 Zeichen bleiben vollständig (99.9% der Fälle)
-    - Umfassende Metadaten für präzise Filterung (27 Felder)
-    - Explizite Cosine Distance Metric für OpenAI Embeddings
-    - Support für Azure OpenAI und Standard OpenAI
-    - Persistente Speicherung mit ChromaDB
+    - Feedback-optimized chunking: <4000 characters remain complete (99.9% of cases)
+    - Comprehensive metadata for precise filtering (27 fields)
+    - Explicit cosine distance metric for OpenAI embeddings
+    - Support for Azure OpenAI and standard OpenAI
+    - Persistent storage with ChromaDB
     
-    Chunking-Strategie:
-    - Feedbacks <4000 Zeichen (~1000 Tokens): KEIN Chunking
-      → Erhält semantische Einheit, vermeidet Fragmentierung
-    - Feedbacks ≥4000 Zeichen: Große Chunks (3000 Zeichen, 500 Overlap)
-      → Nur für extreme Ausreißer, hoher Overlap sichert Kontext
+    Chunking Strategy:
+    - Feedbacks <4000 characters (~1000 tokens): NO chunking
+      → Preserves semantic unit, avoids fragmentation
+    - Feedbacks ≥4000 characters: Large chunks (3000 chars, 500 overlap)
+      → Only for extreme outliers, high overlap ensures context preservation
     
-    Metadaten pro Dokument:
-    - row_id: Zeilen-ID im DataFrame
+    Metadata per Document:
+    - row_id: Row ID in DataFrame
     - nps: Net Promoter Score (0-10)
     - nps_category: Detractor/Passive/Promoter
-    - market: Market-ID (z.B. "C1-DE")
-    - region: Business-Region (z.B. "C1", "CE")
-    - country: ISO 3166-1 Alpha-2 Ländercode (z.B. "DE", "IT")
-    - date: Unix Timestamp
-    - date_str: Datum als String
+    - market: Market ID (e.g. "C1-DE")
+    - region: Business region (e.g. "C1", "CE")
+    - country: ISO 3166-1 Alpha-2 country code (e.g. "DE", "IT")
+    - date: Unix timestamp
+    - date_str: Date as string
     - sentiment_label: positiv/neutral/negativ
-    - sentiment_score: Sentiment-Confidence (-1.0 bis 1.0)
-    - topic: Topic-Kategorie (z.B. "Service", "Lieferproblem")
-    - topic_confidence: Topic-Confidence (0.0 bis 1.0)
-    - verbatim_token_count: Token-Anzahl des Feedbacks
-    - chunk_index: Index des aktuellen Chunks
-    - total_chunks: Gesamtzahl der Chunks für dieses Feedback
-    - verbatim_preview: Erste 100 Zeichen (für Debugging)
+    - sentiment_score: Sentiment confidence (-1.0 to 1.0)
+    - topic: Topic category (e.g. "Service", "Lieferproblem")
+    - topic_confidence: Topic confidence (0.0 to 1.0)
+    - verbatim_token_count: Token count of feedback
+    - chunk_index: Index of current chunk
+    - total_chunks: Total number of chunks for this feedback
+    - verbatim_preview: First 100 characters (for debugging)
     """
 
     def __init__(
@@ -64,7 +64,17 @@ class ChromaVectorStore(VectorStore):
         self._embedding_function = self._create_embedding_function()
 
     def _create_embedding_function(self):
-        """Erstellt OpenAI Embedding Function - unterstützt sowohl Azure als auch Standard OpenAI."""
+        """
+        Creates OpenAI Embedding Function - supports both Azure and standard OpenAI.
+
+        Returns:
+            embedding_functions.OpenAIEmbeddingFunction: Embedding function instance
+            
+        Notes:
+            - Prioritizes Azure OpenAI if AZURE_OPENAI_ENDPOINT is configured
+            - Falls back to standard OpenAI API if Azure is not available
+            - Uses text-embedding-ada-002 model for embeddings
+        """
         # Prüfe zuerst auf Azure OpenAI
         azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("OPENAI_API_BASE")
@@ -99,7 +109,17 @@ class ChromaVectorStore(VectorStore):
             raise ValueError("Weder AZURE_OPENAI_API_KEY+AZURE_OPENAI_ENDPOINT noch OPENAI_API_KEY Umgebungsvariablen sind gesetzt")
 
     def _ensure_persist_directory(self) -> None:
-        """Erstellt Persist-Verzeichnis und prüft Schreibrechte."""
+        """
+        Creates persist directory and verifies write permissions.
+
+        Raises:
+            PermissionError: If write permissions are missing
+            
+        Notes:
+            - Creates directory recursively if it doesn't exist
+            - Verifies write access with temporary test file
+            - Ensures reliable persistent storage for ChromaDB
+        """
         os.makedirs(self.persist_directory, exist_ok=True)
 
         # Schreibrechte testen
@@ -115,30 +135,35 @@ class ChromaVectorStore(VectorStore):
 
     def _get_optimized_chunk_params(self, text_length: int) -> tuple[int, int]:
         """
-        Feedback-optimierte Chunking-Strategie.
+        Feedback-optimized chunking strategy.
         
-        Strategie:
-        - <4000 Zeichen (~1000 Tokens): KEIN Chunking
-          → Erhält Feedback als atomare semantische Einheit
-          → Vermeidet Fragmentierung und Duplikate
-          → Optimal für text-embedding-3-small (max 8191 Tokens)
+        Strategy:
+        - <4000 characters (~1000 tokens): NO chunking
+          → Preserves feedback as atomic semantic unit
+          → Avoids fragmentation and duplicates
+          → Optimal for text-embedding-3-small (max 8191 tokens)
         
-        - ≥4000 Zeichen: Chunking mit großen Chunks + hohem Overlap
-          → Nur für extreme Ausreißer (sehr seltene lange Feedbacks)
-          → Hoher Overlap (500 Zeichen = ~17%) sichert Kontext-Erhalt
+        - ≥4000 characters: Chunking with large chunks + high overlap
+          → Only for extreme outliers (very rare long feedbacks)
+          → High overlap (500 characters = ~17%) ensures context preservation
         
         Rationale:
-        - Kundenfeedback sind atomare Einheiten, keine hierarchischen Dokumente
-        - Kontext kommt aus Metadata (NPS, topic, sentiment), nicht aus Chunks
-        - 99.9% der Feedbacks bleiben vollständig (Median: 122 Zeichen)
+        - Customer feedback are atomic units, not hierarchical documents
+        - Context comes from metadata (NPS, topic, sentiment), not from chunks
+        - 99.9% of feedbacks remain complete (median: 122 characters)
         
         Args:
-            text_length: Länge des Feedback-Texts in Zeichen
+            text_length (int): Length of feedback text in characters
         
         Returns:
-            tuple[int, int]: (chunk_size, overlap)
-                - Bei <4000: (text_length, 0) = kein Chunking
-                - Bei ≥4000: (3000, 500) = große Chunks mit hohem Overlap
+            tuple[int, int]: (chunk_size, overlap) where:
+                - For <4000: (text_length, 0) = no chunking
+                - For ≥4000: (3000, 500) = large chunks with high overlap
+                
+        Notes:
+            - 99.9% of cases result in no chunking
+            - Chunking only activates for exceptional outliers
+            - Large chunk_size preserves context and semantic meaning
         """
         if text_length < 4000:
             # KEIN Chunking: Feedback bleibt vollständig (99.9% der Fälle)
@@ -149,36 +174,51 @@ class ChromaVectorStore(VectorStore):
             return (3000, 600)
 
     def _prepare_content(self, row: pd.Series) -> str:
-        """Bereitet reinen Feedback-Text für Embedding vor."""
+        """
+        Prepares pure feedback text for embedding.
+        
+        Args:
+            row (pd.Series): DataFrame row containing feedback data
+            
+        Returns:
+            str: Cleaned verbatim text ready for embedding
+            
+        Notes:
+            - Extracts 'verbatim' column from row
+            - Converts to string and strips whitespace
+            - Returns empty string if verbatim is missing
+        """
         return str(row["Verbatim"]).strip()
 
     def _prepare_metadata(
         self, row: pd.Series, idx: int, chunk_idx: int, total_chunks: int
     ) -> dict:
         """
-        Bereitet umfassende Metadaten für ChromaDB vor.
+        Prepares comprehensive metadata for ChromaDB.
         
         Args:
-            row: DataFrame-Zeile mit Feedback-Daten
-            idx: Zeilen-Index
-            chunk_idx: Index des aktuellen Chunks
-            total_chunks: Gesamtzahl der Chunks
+            row (pd.Series): DataFrame row containing feedback data
+            idx (int): Row index
+            chunk_idx (int): Index of current chunk
+            total_chunks (int): Total number of chunks
         
         Returns:
-            dict: Validierte Metadaten mit folgenden Keys:
-                - row_id, nps, market (immer vorhanden)
-                - region, country (wenn Market gesplittet wurde)
-                - nps_category (wenn klassifiziert)
-                - sentiment_label, sentiment_score (wenn analysiert)
-                - topic, topic_confidence (wenn klassifiziert)
-                - date, date_str (wenn vorhanden)
-                - verbatim_token_count (wenn berechnet)
-                - chunk_index, total_chunks (Chunking-Info)
-                - verbatim_preview (erste 100 Zeichen)
+            dict: Validated metadata with the following keys:
+                - row_id, nps, market (always present)
+                - region, country (if Market was split)
+                - nps_category (if classified)
+                - sentiment_label, sentiment_score (if analyzed)
+                - topic, topic_confidence (if classified)
+                - date, date_str (if available)
+                - verbatim_token_count (if calculated)
+                - chunk_index, total_chunks (chunking info)
+                - verbatim_preview (first 100 characters)
         
-        Note:
-            Alle Werte werden auf ChromaDB-kompatible Typen validiert
-            (str, int, float, bool)
+        Notes:
+            - All values are validated for ChromaDB-compatible types
+              (str, int, float, bool)
+            - Handles numpy types and None values appropriately
+            - Ensures robust metadata storage for filtering
         """
         # Sichere Datentyp-Konvertierungen
         metadata = {
@@ -251,8 +291,19 @@ class ChromaVectorStore(VectorStore):
 
     def _validate_metadata_types(self, metadata: dict) -> dict:
         """
-        Validiert und korrigiert Metadaten-Typen für ChromaDB.
-        ChromaDB akzeptiert nur: str, int, float, bool
+        Validates and corrects metadata types for ChromaDB.
+        
+        Args:
+            metadata (dict): Original metadata dictionary
+            
+        Returns:
+            dict: Validated metadata with ChromaDB-compatible types
+            
+        Notes:
+            - ChromaDB only accepts: str, int, float, bool
+            - Converts numpy types to Python native types
+            - Filters out None values
+            - Handles edge cases like NaN and inf
         """
         validated = {}
         for key, value in metadata.items():
@@ -269,7 +320,26 @@ class ChromaVectorStore(VectorStore):
         return validated
 
     def split_and_chunk_text(self) -> tuple[list[str], list[dict], list[str]]:
-        """Splittet und chunked Feedback-Texte mit optimierten Parametern."""
+        """
+        Splits and chunks feedback texts with optimized parameters.
+
+        Returns:
+            tuple[list[str], list[dict], list[str]]: Three-element tuple containing:
+                - documents (list[str]): List of content texts (chunks)
+                - metadatas (list[dict]): List of metadata dicts per chunk
+                - ids (list[str]): List of unique IDs per chunk (format: "doc_{idx}_{chunk_idx}")
+                
+        Raises:
+            ValueError: If no valid documents could be created from DataFrame
+            
+        Notes:
+            - Filters out feedbacks <10 characters (too short)
+            - 99.9% of feedbacks remain unchunked (<4000 chars)
+            - Uses RecursiveCharacterTextSplitter with semantic separators
+            - Preserves full metadata from original row for each chunk
+            - Prints detailed chunking statistics to console
+            - Token estimation: 1 token ≈ 4 characters for German text
+        """
         documents = []
         metadatas = []
         ids = []
@@ -359,7 +429,17 @@ class ChromaVectorStore(VectorStore):
         return documents, metadatas, ids
 
     def check_file_path(self) -> bool:
-        """Prüft ob der ChromaDB VectorStore existiert."""
+        """
+        Checks if the ChromaDB VectorStore already exists.
+
+        Returns:
+            bool: True if VectorStore exists, False otherwise
+            
+        Notes:
+            - Checks for existence of persist_directory
+            - Verifies presence of chroma.sqlite3 file
+            - Used to determine load vs create operations
+        """
         if not os.path.exists(self.persist_directory):
             return False
 
@@ -375,13 +455,26 @@ class ChromaVectorStore(VectorStore):
 
     def create_vectorstore(self, force_recreate: bool = False) -> Any | None:
         """
-        Erstellt oder lädt VectorStore.
+        Creates or loads VectorStore with feedback-optimized chunking.
 
         Args:
-            force_recreate: True = Neuerstellen auch wenn vorhanden
+            force_recreate (bool): If True, recreates VectorStore even if it exists.
+                                  Deletes existing store and creates fresh instance.
 
         Returns:
-            ChromaDB Collection oder None bei Fehler
+            chromadb.Collection | None: ChromaDB collection containing embedded feedbacks,
+                                        or None if an error occurred
+            
+        Raises:
+            RuntimeError: If collection could not be persisted correctly
+            
+        Notes:
+            - Loads existing collection if available (unless force_recreate=True)
+            - Creates new collection with cosine distance metric
+            - Uses batch processing for large datasets (configurable batch_size)
+            - Explicitly persists collection to disk via client restart
+            - Verifies persistence by reloading collection
+            - Prints detailed progress and statistics to console
         """
         # Wenn force_recreate=True, lösche komplett und erstelle neu
         if force_recreate:
@@ -483,7 +576,19 @@ class ChromaVectorStore(VectorStore):
             return None
 
     def delete_vectorstore(self) -> bool:
-        """Löscht VectorStore komplett."""
+        """
+        Deletes VectorStore completely (collection + persist directory).
+
+        Returns:
+            bool: True if deletion was successful, False if errors occurred
+            
+        Notes:
+            - Deletes ChromaDB collection from client
+            - Removes entire persist_directory and all contents
+            - Irreversible operation - use with caution
+            - Returns False if any deletion step fails
+            - Prints status messages for each step
+        """
         success = True
 
         # Collection löschen

@@ -76,32 +76,58 @@ class VectorStore(ABC):
         Create or load a vectorstore from a DataFrame.
 
         Args:
-            force_recreate: If True, recreate the store even if it exists
+            force_recreate (bool): If True, recreates the store even if it exists.
+                                  Deletes existing vectorstore and creates fresh instance.
 
         Returns:
-            The created/loaded vectorstore instance, or None if creation fails
+            Any: The created/loaded vectorstore instance (collection, index, etc.),
+                 or None if creation fails
+                 
+        Notes:
+            - Implementations should load existing store if available (unless force_recreate=True)
+            - Should handle chunking, embedding, and persistence
+            - Should validate DataFrame structure before processing
+            - Should provide progress feedback during creation
         """
         pass
 
     @abstractmethod
     def split_and_chunk_text(self) -> tuple[list[str], list[dict], list[str]]:
         """
-        Split text by recursively looking at characters.
+        Split and chunk text data from DataFrame for embedding.
 
-        Recursively tries to split by different characters to find one
-        that works.
+        This method should implement the chunking strategy appropriate for
+        the data type. For customer feedback, most implementations should
+        avoid excessive chunking to preserve semantic units.
 
         Returns:
-            Tuple containing (documents, metadatas, ids) ready for vector store
+            tuple[list[str], list[dict], list[str]]: Three-element tuple containing:
+                - documents (list[str]): List of text chunks ready for embedding
+                - metadatas (list[dict]): List of metadata dicts per chunk with all
+                  relevant fields (NPS, sentiment, topic, etc.)
+                - ids (list[str]): List of unique identifiers per chunk
+                
+        Notes:
+            - Should use RecursiveCharacterTextSplitter with semantic separators
+            - Should preserve all metadata from original DataFrame rows
+            - Should filter out invalid/too-short entries
+            - Should provide chunking statistics
         """
         pass
 
     @abstractmethod
     def delete_vectorstore(self) -> bool:
         """
-        Delete vectorstore if the vectorstore file/directory exists.
+        Delete vectorstore completely if it exists.
 
         Returns:
-            True if the vectorstore successfully deleted, otherwise False
+            bool: True if the vectorstore was successfully deleted,
+                  False if deletion failed or vectorstore doesn't exist
+                  
+        Notes:
+            - Should remove all persisted data (files, directories, collections)
+            - Should handle cases where vectorstore doesn't exist gracefully
+            - Irreversible operation - implementations should be cautious
+            - Should provide feedback about deletion status
         """
         pass
