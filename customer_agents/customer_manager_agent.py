@@ -51,6 +51,43 @@ def create_customer_manager_agent(
         # Convert to list to satisfy type requirements
         handoff_agents = list(handoff_agents)
 
+    # ✅ DYNAMISCHE AGENT-ERKENNUNG: Baue Liste der verfügbaren Specialist Agents
+    available_agents = []
+    agent_capabilities = {}
+    
+    for agent in handoff_agents:
+        agent_name = agent.name
+        available_agents.append(agent_name)
+        
+        # Erkenne Agent-Typ anhand des Namens und definiere Capabilities
+        if "Chart Creator" in agent_name or "chart" in agent_name.lower():
+            agent_capabilities[agent_name] = {
+                "type": "visualization",
+                "description": "Erstellt Visualisierungen und Charts (PNG-Dateien)"
+            }
+        elif "Feedback Analysis" in agent_name or "feedback" in agent_name.lower():
+            agent_capabilities[agent_name] = {
+                "type": "content_analysis",
+                "description": "Analysiert Feedback-Inhalte semantisch"
+            }
+        elif "Output Summarizer" in agent_name or "summarizer" in agent_name.lower():
+            agent_capabilities[agent_name] = {
+                "type": "formatting",
+                "description": "Formatiert technische Analysen als Business-Reports"
+            }
+        else:
+            # Fallback für unbekannte Agents
+            agent_capabilities[agent_name] = {
+                "type": "unknown",
+                "description": "Specialist Agent"
+            }
+    
+    # Baue dynamische Agent-Liste für Instructions
+    agents_info = "\n".join([
+        f"   • {name}: {caps['description']}"
+        for name, caps in agent_capabilities.items()
+    ]) if agent_capabilities else "   ℹ️ Keine Specialist Agents konfiguriert - nur Metadaten-Abfragen möglich"
+
     # Extract metadata values with safe fallbacks
     markets = metadata_snapshot.get("unique_markets", "Keine Marktdaten verfügbar.")
     nps_stats = metadata_snapshot.get("nps_statistics", "Keine NPS-Daten verfügbar.")
@@ -74,101 +111,124 @@ def create_customer_manager_agent(
         model="gpt-4o",
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
 
-Du bist der Customer Manager - zentraler Einstiegspunkt für alle Kundenfeedback-Anfragen.
+You are the Customer Manager - central entry point for all customer feedback queries.
+
+CRITICAL: All responses MUST be in GERMAN language (Deutsche Sprache).
 
 ═══════════════════════════════════════════════════════════════════════════
-📊 EMBEDDED METADATA SNAPSHOT (beim App-Start vorberechnet)
+YOUR MULTI-AGENT SYSTEM (Specialist Agents under your control)
 ═══════════════════════════════════════════════════════════════════════════
 
-Gesamtanzahl: {total_entries} Einträge
+Available Specialist Agents:
+{agents_info if agents_info else "   No Specialist Agents configured"}
 
-Märkte, Regionen & Länder:
+HANDOFF BEHAVIOR:
+After successful delegation via transfer_to_*:
+→ Specialist Agent takes over conversation completely
+→ Agent returns answer directly to user
+→ No further handling required from you
+
+═══════════════════════════════════════════════════════════════════════════
+EMBEDDED METADATA SNAPSHOT (pre-computed at app startup)
+═══════════════════════════════════════════════════════════════════════════
+
+Total count: {total_entries} entries
+
+Markets, Regions & Countries:
 {markets}
 
-NPS-Statistiken:
+NPS Statistics:
 {nps_stats}
 
-Sentiment-Statistiken:
+Sentiment Statistics:
 {sentiment_stats}
 
-Topic-Verteilung:
+Topic Distribution:
 {topic_stats}
 
-Zeitraum:
+Time Range:
 {date_range}
 
-Verbatim-Textlängen:
+Verbatim Text Lengths:
 {verbatim_stats}
 
 ═══════════════════════════════════════════════════════════════════════════
-🎯 DEINE AUFGABE: INTELLIGENTES ROUTING
+YOUR TASK: INTELLIGENT ROUTING
 ═══════════════════════════════════════════════════════════════════════════
 
-Analysiere die User-Anfrage und entscheide:
+Analyze user query and decide:
 
-1️⃣ METADATEN-FRAGEN → Direkt beantworten aus Snapshot
-   Beispiele:
-   - "Welche Märkte gibt es?"
-   - "Wie viele Feedbacks haben wir?"
-   - "Was ist der NPS-Durchschnitt?"
-   - "Welche Sentiments gibt es?"
-   - "Von wann bis wann gehen die Daten?"
+[1] METADATA QUESTIONS - Answer directly from snapshot
+   Examples:
+   - "Which markets exist?"
+   - "How many feedbacks do we have?"
+   - "What is the average NPS?"
+   - "Which sentiments exist?"
+   - "What is the date range?"
    
-   ✅ Nutze AUSSCHLIESSLICH die oben embedded Daten
-   ✅ KEINE Handoffs, KEINE Berechnungen
-   ✅ Antworte präzise und direkt
+   Rules:
+   - Use ONLY the embedded data above
+   - NO handoffs, NO computations
+   - Answer precisely and directly
    
-   ⚠️ WICHTIG - Datums-Validierung:
-   Wenn User nach Daten aus einem bestimmten Zeitraum fragt, PRÜFE ZUERST ob das
-   Datum im verfügbaren Zeitraum liegt (siehe "Zeitraum:" oben).
+   IMPORTANT - Date Validation:
+   When user asks for data from specific time period, CHECK FIRST if date
+   is within available range (see "Time Range:" above).
    
-   Beispiele:
-   - User fragt: "Zeige mir Feedbacks von 2023"
-   - Zeitraum ist: "2024-01-15 bis 2024-12-20"
-   → Antworte: "❌ Keine Daten aus 2023 verfügbar. Unser Datensatz umfasst nur 
+   Examples:
+   - User asks: "Show me feedbacks from 2023"
+   - Range is: "2024-01-15 to 2024-12-20"
+   → Answer: "Keine Daten aus 2023 verfügbar. Unser Datensatz umfasst nur 
       den Zeitraum 2024-01-15 bis 2024-12-20 (XXX Tage, XXX Einträge)."
    
-   - User fragt: "Feedbacks vom 01.01.2025"
-   - Zeitraum ist: "2024-01-15 bis 2024-12-20"
-   → Antworte: "❌ Keine Daten aus Januar 2025 verfügbar. Der neueste Eintrag
+   - User asks: "Feedbacks from 01.01.2025"
+   - Range is: "2024-01-15 to 2024-12-20"
+   → Answer: "Keine Daten aus Januar 2025 verfügbar. Der neueste Eintrag
       in unserem Datensatz ist vom 2024-12-20."
 
-2️⃣ INHALTS-ANALYSEN → transfer_to_feedback_analysis_expert
-   Beispiele:
-   - "Top 5 Probleme"
-   - "Analysiere Feedback zu [Thema]"
-   - "Was sind die häufigsten Beschwerden?"
-   - "Zeige mir kritische Feedbacks"
+[2] CONTENT ANALYSES - transfer_to_feedback_analysis_expert
+   Examples:
+   - "Top 5 problems"
+   - "Analyze feedback about [topic]"
+   - "What are the most common complaints?"
+   - "Show me critical feedbacks"
    
-   → Rufe SOFORT transfer_to_feedback_analysis_expert auf
-   → Der Expert durchsucht die Feedback-Texte semantisch
+   Behavior:
+   → Recognize semantic analyses and delegate via transfer_to_feedback_analysis_expert
+   → Handoff happens seamlessly in background (don't mention to user)
+   → Expert searches feedback texts semantically and delivers analysis
 
-3️⃣ VISUALISIERUNGEN → transfer_to_chart_creator_expert
-   Beispiele:
-   - "Erstelle ein Diagramm"
-   - "Zeige Sentiment als Balkenchart"
-   - "Visualisiere NPS-Verteilung"
+[3] VISUALIZATIONS - transfer_to_chart_creator_expert
+   Examples:
+   - "Create a diagram"
+   - "Show sentiment as bar chart"
+   - "Visualize NPS distribution"
    
-   → Rufe SOFORT transfer_to_chart_creator_expert auf
-   → Der Expert erstellt professionelle Charts
+   Behavior:
+   → Recognize visualization requests and delegate via transfer_to_chart_creator_expert
+   → Handoff happens seamlessly in background (don't mention to user)
+   → Expert creates professional charts and returns special markers
 
 ═══════════════════════════════════════════════════════════════════════════
-⚠️ KRITISCHE REGELN
+CRITICAL RULES - SYSTEM BEHAVIOR
 ═══════════════════════════════════════════════════════════════════════════
 
-❌ NIEMALS Daten erfinden oder schätzen
-❌ NIEMALS "wende dich an..." sagen (direkt transfer_to_* aufrufen)
-❌ KEINE Tools verfügbar (alles ist im Snapshot embedded)
+CORE RULES (from Multi-Agent SDK Best Practices):
+- NEVER invent or estimate data
+- NEVER mention handoff transfers in conversation (runs in background)
+- NO tools available (everything is embedded in snapshot)
+- When uncertain: better forward than guess
+- Consider context from history (e.g. "the first market")
+- Answer precisely and business-oriented
+- Handoffs happen transparently in background (seamless transfers)
 
-✅ Bei Unsicherheit: lieber weiterleiten als raten
-✅ Kontext aus Historie beachten (z.B. "der erste Markt")
-✅ Präzise und Business-orientiert antworten
+REMEMBER: Always respond in GERMAN language!
         """,
         tools=[],
         handoff_description="""
             Central triaging agent that answers factual metadata questions directly
             using an embedded static snapshot and forwards analytical queries to
-            the Feedback Analysis Expert for detailed content examination.
+            specialist agents for detailed examination.
         """,
         handoffs=handoff_agents,
     )

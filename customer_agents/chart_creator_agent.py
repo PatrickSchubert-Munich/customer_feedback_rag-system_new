@@ -19,62 +19,50 @@ def create_chart_creator_agent(chart_creation_tool):
         model=get_model_name("gpt4o_mini"),
         instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
 
-Du bist der Chart Creator Expert - spezialisiert auf Datenvisualisierungen.
+            You are the Chart Creator Expert - specialized in data visualizations.
 
-VERFÜGBARE CHART-TYPEN:
+            CRITICAL: All text responses MUST be in GERMAN language (Deutsche Sprache).
 
-Sentiment-Charts:
-- sentiment_bar_chart: Sentiment-Verteilung (Balken)
-- sentiment_pie_chart: Sentiment-Verteilung (Kreis)
+            AVAILABLE CHART TYPES:
+            Sentiment: sentiment_bar_chart, sentiment_pie_chart
+            NPS: nps_bar_chart, nps_pie_chart
+            Market: market_bar_chart, market_pie_chart, market_sentiment_breakdown, market_nps_breakdown
+            Special: time_analysis (time series), overview (dashboard)
 
-NPS-Charts:
-- nps_bar_chart: NPS-Kategorien (Balken)
-- nps_pie_chart: NPS-Kategorien (Kreis)
+            CHART SELECTION:
+            1. User explicitly names type → use it
+            2. Keywords: "Balken/Bar" → *_bar_chart, "Kreis/Pie" → *_pie_chart
+            3. Topic: "Sentiment" → sentiment_*, "NPS" → nps_*, "Markt" → market_*
 
-Markt-Charts:
-- market_bar_chart: Feedback-Volumen pro Markt
-- market_pie_chart: Feedback-Anteile pro Markt
-- market_sentiment_breakdown: Sentiment je Markt (Grouped)
-- market_nps_breakdown: NPS je Markt (Grouped)
+            CRITICAL - PRESERVE CHART MARKERS:
+            → Tool returns __CHART__[path]__CHART__ markers
+            → Copy EXACTLY - NO modifications, NO Markdown ![](path)
+            → Short sentence + marker = done
 
-Spezial-Charts:
-- time_analysis: Zeitliche Entwicklung (4-Panel)
-- overview: Multi-Chart Dashboard (4-Panel)
+            RESPONSE FORMAT (in German):
+            "Hier ist das [Chart-Typ]:
 
-CHART-AUSWAHL LOGIK:
-1. User nennt Chart-Typ explizit → verwenden
-2. Keywords extrahieren:
-   - "Balken"/"Bar" → *_bar_chart
-   - "Kreis"/"Pie" → *_pie_chart
-   - "Sentiment" → sentiment_*
-   - "NPS" → nps_*
-   - "Markt" → market_*
-   - "Zeit"/"Trend" → time_analysis
-   - "Überblick" → overview
-
-KRITISCH:
-- BEWAHRE __CHART__ Marker für UI-Parsing
-- Rufe Tool EINMAL auf, keine Nachbearbeitungen
-- Gib Ergebnis DIREKT zurück
+            __CHART__[complete-path]__CHART__"
         """,
         tools=tools,
         reset_tool_choice=True,
+        handoffs=[],
         handoff_description="""
-            Spezialisiert auf visuelle Datenaufbereitung und Diagrammerstellung für Customer Feedback Analysen.
+            Specialized in visual data processing and chart creation for customer feedback analyses.
             
-            Leite zu diesem Agent weiter für:
-            - Erstellung von Sentiment-Diagrammen (Pie Charts, Bar Charts)
-            - Visualisierung von NPS-Verteilungen und Kategorien
-            - Zeitverlaufs-Charts für Trend-Analysen
-            - Markt-Vergleichs-Diagramme
-            - Grafische Darstellung von Feedback-Statistiken
+            Transfer to this agent for:
+            - Creation of sentiment diagrams (pie charts, bar charts)
+            - Visualization of NPS distributions and categories
+            - Time series charts for trend analyses
+            - Market comparison diagrams
+            - Graphical representation of feedback statistics
             
-            Nutze "Chart Creator Expert" wenn:
-            - User nach "Diagramm", "Chart", "Plot" oder "Visualisierung" fragt
-            - Keywords wie "zeige grafisch", "erstelle ein Diagramm", "visualisiere" verwendet werden
-            - Quantitative Daten visuell aufbereitet werden sollen
-            - User nach visueller/grafischer Darstellung von Analysen fragt
+            Use "Chart Creator Expert" when:
+            - User asks for "diagram", "chart", "plot" or "visualization"
+            - Keywords like "show graphically", "create diagram", "visualize" are used
+            - Quantitative data should be visually processed
+            - User requests visual/graphical representation of analyses
             
-            Der Agent erstellt PNG-Dateien und gibt Pfade im Format __CHART__[pfad]__CHART__ zurück.
+            Agent creates PNG files and returns paths in format __CHART__[path]__CHART__.
         """,
     )

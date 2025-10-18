@@ -3,26 +3,35 @@ import pandas as pd
 
 def create_metadata_tool(collection):
     """
-    Erstellt Metadata-Snapshot-Builder für Customer Manager.
+    Creates metadata snapshot builder for Customer Manager.
     
-    Da kein Metadata Analysis Agent mehr existiert, werden die Funktionen
-    direkt (ohne @function_tool Decorator) implementiert und nur für den
-    Snapshot-Build beim App-Start verwendet.
+    Since no Metadata Analysis Agent exists anymore, functions are
+    implemented directly (without @function_tool decorator) and only used
+    for snapshot building at app startup.
     
     Args:
-        collection: ChromaDB Collection mit Metadaten
+        collection: ChromaDB Collection with metadata
     
     Returns:
-        callable: build_metadata_snapshot Funktion zur Snapshot-Erstellung
+        callable: build_metadata_snapshot function for snapshot creation
     """
     def get_all_metadata() -> list:
-        """Alle Metadaten werden aus der Collection geladen."""
+        """All metadata loaded from collection."""
         data = collection.get(include=["metadatas"])
         meta_data = data["metadatas"]
         return meta_data
 
     def convert_metadata_to_dataframe(metadatas: list) -> pd.DataFrame:
-        """Konvertiert die Liste der Metadaten-Dictionaries in ein pandas DataFrame."""
+        """
+        Converts list of metadata dictionaries into pandas DataFrame.
+
+        Args:
+            metadatas (list): List of metadata dictionaries from collection.
+
+        Returns:
+            pd.DataFrame: DataFrame with metadata columns (market, region, country,
+                nps, sentiment_label, topic, date_str, etc.).
+        """
         return pd.DataFrame(metadatas)
 
     # Lade ALLE Metadaten aus der Collection
@@ -51,30 +60,30 @@ def create_metadata_tool(collection):
 
     # ═══════════════════════════════════════════════════════════════════════
     # METADATA EXTRACTION FUNCTIONS
-    # Direkte Implementierung ohne @function_tool - nur für Snapshot-Build
+    # Direct implementation without @function_tool - only for snapshot building
     # ═══════════════════════════════════════════════════════════════════════
     
     def get_unique_markets() -> str:
         """
-        Liefert alle verfügbaren Märkte, Regionen und Länder im Datensatz.
+        Returns all available markets, regions and countries in dataset.
 
         Returns:
-            str: Strukturierte Auflistung von:
-                - Märkte: Vollständige Market-IDs (z.B. "C1-DE, C1-FR, CE-IT, ...")
-                - Regionen: Business-Regionen-Codes (z.B. "C1, C3, C5, CE, IT, ...")
-                - Länder: ISO 3166-1 Alpha-2 Ländercodes (z.B. "AT, DE, FR, IT, ...")
-                oder "Keine Marktdaten verfügbar." bei fehlenden Daten
+            str: Structured listing of:
+                - Markets: Complete market IDs (e.g. "C1-DE, C1-FR, CE-IT, ...")
+                - Regions: Business region codes (e.g. "C1, C3, C5, CE, IT, ...")
+                - Countries: ISO 3166-1 Alpha-2 country codes (e.g. "AT, DE, FR, IT, ...")
+                or "Keine Marktdaten verfügbar." when data is missing
 
         Examples:
             >>> get_unique_markets()
             "Märkte (5): C1-DE, C1-FR, CE-IT, C3-AT, IT-IT\\n\
-Regionen (4): C1, C3, CE, IT\\n\
-Länder ISO-Code (4): AT, DE, FR, IT"
+            Regionen (4): C1, C3, CE, IT\\n\
+            Länder ISO-Code (4): AT, DE, FR, IT"
         
         Notes:
-            - Märkte werden am "-" gesplittet in Region (links) und Country (rechts)
-            - Regionen sind Business-spezifische Codes (nicht geografisch)
-            - Länder folgen ISO 3166-1 Alpha-2 Standard (2-Buchstaben-Codes)
+            - Markets are split at "-" into Region (left) and Country (right)
+            - Regions are business-specific codes (not geographic)
+            - Countries follow ISO 3166-1 Alpha-2 standard (2-letter codes)
         """
         lines = []
         
@@ -107,24 +116,24 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_nps_statistics() -> str:
         """
-        Liefert umfassende NPS-Statistiken des Datensatzes.
+        Returns comprehensive NPS statistics of the dataset.
 
         Returns:
-            str: Multi-Line String mit NPS-Analyse:
-                - Anzahl Einträge
-                - Durchschnitt (Mean)
+            str: Multi-line string with NPS analysis:
+                - Number of entries
+                - Average (Mean)
                 - Median
                 - Range (Min-Max)
-                - Kategorien-Verteilung (Detractor/Passive/Promoter mit Prozenten)
-                Bei fehlenden Daten: "Keine NPS-Daten verfügbar."
+                - Category distribution (Detractor/Passive/Promoter with percentages)
+                When data is missing: "Keine NPS-Daten verfügbar."
 
         Examples:
             >>> get_nps_statistics()
             "NPS-Statistiken (1500 Einträge):\\n• Durchschnitt: 7.85\\n• Median: 8.0\\n..."
 
         Notes:
-            - NPS-Kategorien: Detractor (0-6), Passive (7-8), Promoter (9-10)
-            - Prozente beziehen sich auf Gesamt-NPS-Einträge
+            - NPS categories: Detractor (0-6), Passive (7-8), Promoter (9-10)
+            - Percentages refer to total NPS entries
         """
         if "nps" not in df_metadata.columns or df_metadata["nps"].isna().all():
             return "Keine NPS-Daten verfügbar."
@@ -155,13 +164,13 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_sentiment_statistics() -> str:
         """
-        Liefert Sentiment-Analysestatistiken des Datensatzes.
+        Returns sentiment analysis statistics of the dataset.
 
         Returns:
-            str: Multi-Line String mit:
-                - Sentiment-Labels-Verteilung (positiv/negativ/neutral mit Prozenten)
-                - Sentiment-Scores (Durchschnitt, Range)
-                Bei fehlenden Daten: "Keine Sentiment-Daten verfügbar."
+            str: Multi-line string with:
+                - Sentiment label distribution (positiv/negativ/neutral with percentages)
+                - Sentiment scores (average, range)
+                When data is missing: "Keine Sentiment-Daten verfügbar."
 
         Examples:
             >>> get_sentiment_statistics()
@@ -191,13 +200,13 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_topic_statistics() -> str:
         """
-        Liefert Topic-Klassifizierungs-Statistiken des Datensatzes.
+        Returns topic classification statistics of the dataset.
 
         Returns:
-            str: Multi-Line String mit:
-                - Topic-Verteilung (mit Prozenten)
-                - Durchschnittliche Confidence-Scores pro Topic
-                Bei fehlenden Daten: "Keine Topic-Daten verfügbar."
+            str: Multi-line string with:
+                - Topic distribution (with percentages)
+                - Average confidence scores per topic
+                When data is missing: "Keine Topic-Daten verfügbar."
 
         Examples:
             >>> get_topic_statistics()
@@ -225,20 +234,20 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_date_range() -> str:
         """
-        Liefert den Zeitraum des Datensatzes mit Lücken-Erkennung.
+        Returns the time range of the dataset with gap detection.
 
         Returns:
-            str: Zeitraum mit Start/End-Datum, Anzahl Tage, Einträge und Lücken-Info.
+            str: Time range with start/end date, number of days, entries and gap info.
                  Format: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)"
-                 Mit Lücken: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)
-                              ⚠️ Achtung: Nicht alle Tage haben Daten! (150 Tage mit Einträgen)"
-                 Bei fehlenden Daten: "Keine Datumsdaten verfügbar."
+                 With gaps: "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)
+                            ⚠️ Achtung: Nicht alle Tage haben Daten! (150 Tage mit Einträgen)"
+                 When data is missing: "Keine Datumsdaten verfügbar."
 
         Examples:
             >>> get_date_range()
             "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)"
             
-            >>> get_date_range()  # Mit Lücken
+            >>> get_date_range()  # With gaps
             "Zeitraum: 2024-01-01 bis 2024-12-31 (365 Tage Spanne, 1500 Einträge)
             ⚠️ Achtung: Nicht alle Tage haben Daten! Nur 150 von 365 Tagen haben Einträge."
         """
@@ -285,21 +294,21 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_verbatim_statistics() -> str:
         """
-        Liefert Statistiken über Feedback-Text-Längen (Token-Anzahl).
+        Returns statistics about feedback text lengths (token count).
 
         Returns:
-            str: Multi-Line String mit:
-                - Durchschnittliche Token-Anzahl
+            str: Multi-line string with:
+                - Average token count
                 - Median, Min, Max
-                - Längenverteilung (kurz/mittel/lang mit Prozenten)
-                Bei fehlenden Daten: "Keine Token-Count-Daten verfügbar."
+                - Length distribution (short/medium/long with percentages)
+                When data is missing: "Keine Token-Count-Daten verfügbar."
 
         Examples:
             >>> get_verbatim_statistics()
             "Verbatim-Statistiken (1500 Texte):\\n• Durchschnittliche Länge: 45.3 Token\\n..."
 
         Notes:
-            - Kurz: ≤20 Token, Mittel: 21-100 Token, Lang: >100 Token
+            - Short: ≤20 tokens, Medium: 21-100 tokens, Long: >100 tokens
         """
         if "verbatim_token_count" not in df_metadata.columns:
             return "Keine Token-Count-Daten verfügbar."
@@ -336,16 +345,16 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def get_dataset_overview() -> str:
         """
-        Liefert kompakte Übersicht aller Datensatz-Kennzahlen.
+        Returns compact overview of all dataset metrics.
 
         Returns:
-            str: Multi-Line Übersicht mit:
-                - Gesamt-Anzahl Einträge
-                - Anzahl/Liste Märkte
-                - NPS-Durchschnitt
-                - Häufigstes Sentiment
-                - Zeitraum
-                Komprimierte Darstellung für schnellen Überblick.
+            str: Multi-line overview with:
+                - Total number of entries
+                - Number/list of markets
+                - Average NPS
+                - Most common sentiment
+                - Time range
+                Compressed representation for quick overview.
 
         Examples:
             >>> get_dataset_overview()
@@ -397,18 +406,18 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
     def resolve_market_name(market_input: str) -> str:
         """
-        Mappt User-Eingaben auf valide Datensatz-Marktnamen.
+        Maps user inputs to valid dataset market names.
         
         Args:
-            market_input (str): User-Eingabe für Markt.
-                Unterstützt: Kürzel (DE, AT, CH, US), Ländernamen (Deutschland, Austria),
-                exakte Market-IDs (C1-DE)
+            market_input (str): User input for market.
+                Supports: Abbreviations (DE, AT, CH, US), country names (Deutschland, Austria),
+                exact market IDs (C1-DE)
 
         Returns:
-            str: Valider Market-Name aus Datensatz oder Fehlermeldung mit verfügbaren Märkten.
-                - Bei exakter Übereinstimmung: Market-Name (z.B. "C1-DE")
-                - Bei Partial Match: Erster Match oder Warnung bei Mehrdeutigkeit
-                - Bei Fehler: "❌ Unbekannter Markt: ... Verfügbare Märkte: ..."
+            str: Valid market name from dataset or error message with available markets.
+                - Exact match: Market name (e.g. "C1-DE")
+                - Partial match: First match or warning on ambiguity
+                - Error: "❌ Unbekannter Markt: ... Verfügbare Märkte: ..."
 
         Examples:
             >>> resolve_market_name("DE")
@@ -422,8 +431,8 @@ Länder ISO-Code (4): AT, DE, FR, IT"
 
         Notes:
             - Mapping: deutschland→DE, österreich→AT, schweiz→CH, usa→US, etc.
-            - Case-insensitive Matching
-            - Bei Mehrdeutigkeit: Nutzt ersten Match mit Warnung
+            - Case-insensitive matching
+            - On ambiguity: Uses first match with warning
         """
         if "market" not in df_metadata.columns:
             return "❌ Keine Marktdaten verfügbar."
@@ -482,19 +491,19 @@ Länder ISO-Code (4): AT, DE, FR, IT"
         return f"❌ Unbekannter Markt: '{market_input}'. Verfügbare Märkte: {', '.join(available_markets)}"
 
     # ═══════════════════════════════════════════════════════════════════════
-    # SNAPSHOT BUILDER (einmalig beim App-Start)
+    # SNAPSHOT BUILDER (once at app startup)
     # ═══════════════════════════════════════════════════════════════════════
     
     def build_metadata_snapshot() -> dict:
         """
-        Baut einen statischen Metadata-Snapshot für Customer Manager Instructions.
+        Builds a static metadata snapshot for Customer Manager instructions.
         
-        Dieser Snapshot wird EINMALIG beim App-Start erstellt und direkt in die
-        Instructions des Customer Manager embedded. Dadurch entfallen Runtime-Tool-Calls
-        und der Manager kann Metadaten-Fragen direkt beantworten.
+        This snapshot is created ONCE at app startup and embedded directly into
+        Customer Manager instructions. This eliminates runtime tool calls and
+        allows the manager to answer metadata questions directly.
         
         Returns:
-            dict: Snapshot mit allen Metadaten-Werten als formatierte Strings
+            dict: Snapshot with all metadata values as formatted strings
                 Keys: unique_markets, nps_statistics, sentiment_statistics,
                       topic_statistics, date_range, verbatim_statistics, 
                       dataset_overview, total_entries
@@ -510,5 +519,5 @@ Länder ISO-Code (4): AT, DE, FR, IT"
             "total_entries": str(len(df_metadata)),
         }
 
-    # Rückgabe: Nur noch die build_snapshot Funktion (keine Tools mehr für Agents)
+    # Return: Only build_snapshot function (no more tools for agents)
     return build_metadata_snapshot

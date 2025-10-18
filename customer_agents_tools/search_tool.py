@@ -2,20 +2,20 @@ from agents import function_tool
 
 
 class SearchToolFactory:
-    """Verbesserte Search Tool Factory mit erweiterten Error Handling für LLM Feedback"""
+    """Enhanced Search Tool Factory with extended error handling for LLM feedback"""
 
-    # Confidence Thresholds für Semantic Search Quality (optimiert für Ada-002)
-    # Test-Performance mit Ada-002: Durchschnitt 92.0%, Range 88.8%-94.1%
+    # Confidence Thresholds for Semantic Search Quality (optimized for Ada-002)
+    # Test Performance with Ada-002: Average 92.0%, Range 88.8%-94.1%
     CONFIDENCE_THRESHOLDS = {
-        "REJECT": 0.60,      # <60%: Keine Ergebnisse (Ada-002: alle Queries >88%)
-        "LOW": 0.75,         # <75%: Warnung niedrige Qualität (Ada-002: selten <75%)
-        "MEDIUM": 0.85,      # <85%: Moderate Qualität (Ada-002: 88-94% typisch)
-        # ≥85%: Hohe Qualität (Ada-002 Cross-Lingual Performance)
+        "REJECT": 0.60,      # <60%: No results (Ada-002: all queries >88%)
+        "LOW": 0.75,         # <75%: Warning low quality (Ada-002: rarely <75%)
+        "MEDIUM": 0.85,      # <85%: Moderate quality (Ada-002: 88-94% typical)
+        # ≥85%: High quality (Ada-002 Cross-Lingual Performance)
     }
 
     @staticmethod
     def create_search_tool(collection):
-        """Erstellt Search Tool mit verbessertem Error Handling für LLMs"""
+        """Creates Search Tool with enhanced error handling for LLMs"""
 
         @function_tool
         def search_customer_feedback(
@@ -31,75 +31,76 @@ class SearchToolFactory:
             date_to: str | None = None,
         ) -> str:
             """
-            Durchsucht Kundenfeedback-Datenbank semantisch mit optionalen Metadata-Filtern.
+            Semantically searches customer feedback database with optional metadata filters.
 
             Args:
-                query (str): Semantische Suchanfrage in Deutsch oder Englisch.
-                    Beispiele: "Lieferprobleme", "Service-Beschwerden", "positive Erfahrungen"
+                query (str): Semantic search query in German or English.
+                    Examples: "Lieferprobleme", "Service-Beschwerden", "positive Erfahrungen"
                     
-                max_results (int, optional): Anzahl Ergebnisse (3-50). Default: 15.
-                    Bei Top-N Analysen entsprechend setzen (z.B. "Top 5" → max_results=5)
+                max_results (int, optional): Number of results (3-50). Default: 15.
+                    For Top-N analyses set accordingly (e.g. "Top 5" → max_results=5)
                 
-                market_filter (str | None, optional): Markt-Filter für spezifischen Market.
-                    Format: "REGION-COUNTRY" (z.B. "C1-DE", "CE-IT")
-                    None = alle Märkte durchsuchen. Default: None
+                market_filter (str | None, optional): Market filter for specific market.
+                    Format: "REGION-COUNTRY" (e.g. "C1-DE", "CE-IT")
+                    None = search all markets. Default: None
                 
-                region_filter (str | None, optional): Regions-Filter.
-                    Werte: "C1", "CE", etc.
-                    None = alle Regionen. Default: None
+                region_filter (str | None, optional): Region filter.
+                    Values: "C1", "CE", etc.
+                    None = all regions. Default: None
                 
-                country_filter (str | None, optional): Länder-Filter (ISO 3166-1 Alpha-2).
-                    Werte: "DE", "IT", "FR", "ES", etc.
-                    None = alle Länder. Default: None
+                country_filter (str | None, optional): Country filter (ISO 3166-1 Alpha-2).
+                    Values: "DE", "IT", "FR", "ES", etc.
+                    None = all countries. Default: None
                 
-                sentiment_filter (str | None, optional): Sentiment-Filter.
-                    Werte: "positiv", "neutral", "negativ"
-                    None = alle Sentiments. Default: None
+                sentiment_filter (str | None, optional): Sentiment filter.
+                    Values: "positiv", "neutral", "negativ" (German filter values!)
+                    None = all sentiments. Default: None
                 
-                nps_filter (str | None, optional): NPS-Kategorie-Filter.
-                    Werte: "Promoter" (9-10), "Passive" (7-8), "Detractor" (0-6)
-                    None = alle NPS-Kategorien. Default: None
+                nps_filter (str | None, optional): NPS category filter.
+                    Values: "Promoter" (9-10), "Passive" (7-8), "Detractor" (0-6)
+                    None = all NPS categories. Default: None
                 
-                topic_filter (str | None, optional): Topic-Filter.
-                    Werte: "Lieferproblem", "Service", "Produktqualität", "Preis",
+                topic_filter (str | None, optional): Topic filter.
+                    Values: "Lieferproblem", "Service", "Produktqualität", "Preis",
                            "Terminvergabe", "Werkstatt", "Kommunikation", "Sonstiges"
-                    None = alle Topics. Default: None
+                    (German topic values!)
+                    None = all topics. Default: None
                 
-                date_from (str | None, optional): Start-Datum für Zeitraum-Filter.
-                    Format: "YYYY-MM-DD" (z.B. "2023-01-01")
-                    None = kein Start-Datum. Default: None
+                date_from (str | None, optional): Start date for time range filter.
+                    Format: "YYYY-MM-DD" (e.g. "2023-01-01")
+                    None = no start date. Default: None
                 
-                date_to (str | None, optional): End-Datum für Zeitraum-Filter.
-                    Format: "YYYY-MM-DD" (z.B. "2023-12-31")
-                    None = kein End-Datum. Default: None
+                date_to (str | None, optional): End date for time range filter.
+                    Format: "YYYY-MM-DD" (e.g. "2023-12-31")
+                    None = no end date. Default: None
 
             Returns:
-                str: Formatierte Ergebnisse mit Confidence-Bewertung oder Fehlermeldung.
+                str: Formatted results with confidence rating or error message.
                     Format: "[CONFIDENCE]\n[RESULTS]\n[SUMMARY]"
                     
-                    Bei Erfolg - Liste von Feedbacks mit Metadaten:
-                      • market: Market-ID (z.B. "C1-DE")
-                      • region: Business-Region (z.B. "C1", "CE")
-                      • country: ISO Ländercode (z.B. "DE", "IT")
+                    On success - List of feedbacks with metadata:
+                      • market: Market ID (e.g. "C1-DE")
+                      • region: Business region (e.g. "C1", "CE")
+                      • country: ISO country code (e.g. "DE", "IT")
                       • nps: Net Promoter Score (0-10)
                       • nps_category: Detractor/Passive/Promoter
                       • sentiment_label: positiv/neutral/negativ
-                      • topic: Topic-Kategorie (z.B. "Service", "Lieferproblem")
-                      • date_str: Datum als String
+                      • topic: Topic category (e.g. "Service", "Lieferproblem")
+                      • date_str: Date as string
                     
-                    Bei Fehler: Detaillierte Fehlermeldung mit Lösungsvorschlägen
-                    Bei niedriger Confidence: Warnung über eingeschränkte Relevanz
-                    Bei keinen Ergebnissen: Info über Filter-Kombination
+                    On error: Detailed error message with solution suggestions
+                    On low confidence: Warning about limited relevance
+                    On no results: Info about filter combination
 
             Raises:
-                None: Alle Fehler werden als formatierte String-Meldungen zurückgegeben
+                None: All errors are returned as formatted string messages
 
             Examples:
-                >>> # Basis-Suche ohne Filter
+                >>> # Basic search without filters
                 >>> search_customer_feedback("Probleme mit Lieferung", max_results=10)
                 "✅ HOHE RELEVANZ\\n✅ Gefunden: 10 Feedbacks (Ø Relevanz: 85.3%)\\n..."
                 
-                >>> # Lieferprobleme aus den letzten 3 Monaten
+                >>> # Delivery problems from last 3 months
                 >>> search_customer_feedback(
                 ...     query="Lieferverzögerung",
                 ...     topic_filter="Lieferproblem",
@@ -108,7 +109,7 @@ class SearchToolFactory:
                 ... )
                 "✅ MODERATE RELEVANZ\\n✅ Gefunden: 15 Feedbacks (Ø Relevanz: 72.1%)\\n..."
                 
-                >>> # Negative Service-Feedbacks aus Deutschland
+                >>> # Negative service feedbacks from Germany
                 >>> search_customer_feedback(
                 ...     query="unfreundlicher Service",
                 ...     country_filter="DE",
@@ -117,7 +118,7 @@ class SearchToolFactory:
                 ... )
                 "✅ HOHE RELEVANZ\\n✅ Gefunden: 12 Feedbacks (Ø Relevanz: 88.5%)\\n..."
                 
-                >>> # Detractor-Feedbacks für spezifischen Market
+                >>> # Detractor feedbacks for specific market
                 >>> search_customer_feedback(
                 ...     query="Beschwerde",
                 ...     market_filter="C1-DE",
@@ -128,12 +129,15 @@ class SearchToolFactory:
                 "⚠️ NIEDRIGE RELEVANZ\\n⚠️ Gefunden: 8 Feedbacks (Ø Relevanz: 58.2%)\\n..."
 
             Notes:
-                - Confidence-Schwellenwerte (Ada-002): REJECT <60%, LOW <75%, MEDIUM <85%, HIGH ≥85%
-                - Ada-002 Performance: Durchschnitt 92.0%, typischer Range 88-94%
-                - Filter werden mit AND kombiniert (alle müssen zutreffen)
-                - Bei zu vielen Filtern können Ergebnisse leer sein
-                - Semantic Search arbeitet NACH Metadata-Filterung
-                - Topic "Sonstiges" enthält Feedbacks ohne spezifische Keywords
+                - IMPORTANT: Filter values are in GERMAN (data compatibility)
+                  sentiment_filter: "positiv", "neutral", "negativ"
+                  topic_filter: "Lieferproblem", "Service", "Terminvergabe", etc.
+                - Confidence thresholds (Ada-002): REJECT <60%, LOW <75%, MEDIUM <85%, HIGH ≥85%
+                - Ada-002 Performance: Average 92.0%, typical range 88-94%
+                - Filters are combined with AND (all must match)
+                - Too many filters may result in empty results
+                - Semantic search operates AFTER metadata filtering
+                - Topic "Sonstiges" contains feedbacks without specific keywords
             """
             print(f"🔍 SEARCH TOOL: query='{query}', max_results={max_results}")
             print(f"   📊 Filter: market={market_filter}, region={region_filter}, country={country_filter}")
@@ -290,13 +294,13 @@ Try:
                 print(f"📊 CONFIDENCE: Top={top_similarity:.3f}, Avg={avg_similarity:.3f}")
                 
                 # REJECT: Zu geringe Relevanz - keine Antwort
-                if top_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["REJECT"]:
+                if top_similarity < SearchToolFactory.CONFIDENCE_THRESHOLDS["REJECT"]:
                     return f"""❌ KEINE RELEVANTEN ERGEBNISSE GEFUNDEN
 
 📊 Qualitäts-Metriken:
    • Beste Übereinstimmung: {top_similarity:.1%}
    • Durchschnitt: {avg_similarity:.1%}
-   • Schwellenwert: {RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["REJECT"]:.1%}
+   • Schwellenwert: {SearchToolFactory.CONFIDENCE_THRESHOLDS["REJECT"]:.1%}
 
 ⚠️  INTERPRETATION:
 Die semantische Ähnlichkeit zwischen Ihrer Anfrage und dem Datensatz ist zu gering.
@@ -318,8 +322,8 @@ Das gesuchte Thema existiert wahrscheinlich nicht in dieser Form in den Kundenfe
 📋 Tipp: Verwenden Sie get_dataset_metadata um zu sehen, welche Themen verfügbar sind."""
 
                 # LOW CONFIDENCE: Schwache Relevanz - Warnung
-                elif avg_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"] or \
-                     top_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"]:
+                elif avg_similarity < SearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"] or \
+                     top_similarity < SearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"]:
                     confidence_level = "⚠️  NIEDRIGE RELEVANZ"
                     confidence_msg = f"""
 ⚠️  ACHTUNG: ERGEBNISSE MIT EINGESCHRÄNKTER RELEVANZ
@@ -336,7 +340,7 @@ Bitte prüfen Sie die Relevanz der einzelnen Feedbacks kritisch.
 """
                 
                 # MEDIUM CONFIDENCE: Akzeptable Qualität
-                elif avg_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["MEDIUM"]:
+                elif avg_similarity < SearchToolFactory.CONFIDENCE_THRESHOLDS["MEDIUM"]:
                     confidence_level = "✅ MODERATE RELEVANZ"
                     confidence_msg = f"""
 ✅ Gefunden: {len(documents)} Feedbacks (Ø Relevanz: {avg_similarity:.1%})
@@ -395,7 +399,7 @@ Bitte prüfen Sie die Relevanz der einzelnen Feedbacks kritisch.
                         formatted_output += f" | Markets: {', '.join(sorted(markets))}"
 
                 # Add confidence interpretation for the LLM
-                if avg_similarity < RobustSearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"]:
+                if avg_similarity < SearchToolFactory.CONFIDENCE_THRESHOLDS["LOW"]:
                     formatted_output += "\n\n⚠️  LLM NOTE: Low confidence results. Consider mentioning limitations in your analysis."
                 
                 print(f"✅ SEARCH SUCCESS: {len(documents)} results (confidence: {avg_similarity:.2%})")
@@ -408,16 +412,16 @@ Bitte prüfen Sie die Relevanz der einzelnen Feedbacks kritisch.
                 # Provide actionable error message to LLM
                 return f"""❌ SEARCH ERROR: Database query failed.
                 
-🔧 Error Details: {error_details}
+                        🔧 Error Details: {error_details}
 
-🚨 What this means: The customer feedback database encountered an issue while processing your search.
+                        🚨 What this means: The customer feedback database encountered an issue while processing your search.
 
-✅ Suggested Actions:
-1. Try a simpler search query
-2. Reduce the number of results requested  
-3. Check if the search terms are in German or English
-4. If this persists, use get_dataset_metadata to check available data
+                        ✅ Suggested Actions:
+                        1. Try a simpler search query
+                        2. Reduce the number of results requested  
+                        3. Check if the search terms are in German or English
+                        4. If this persists, use get_dataset_metadata to check available data
 
-⚠️  Please inform the user about this technical issue and suggest alternative approaches."""
-
+                        ⚠️  Please inform the user about this technical issue and suggest alternative approaches.
+                        """
         return search_customer_feedback

@@ -1,16 +1,3 @@
-"""
-Analytics Tools - Factory Pattern für Collection Injection
-Alle Visualisierungs-Tools für den Analytics Agent
-Mit Streamlit-Integration
-Mit umfassendem Debugging und Error-Handling
-
-WICHTIGE ÄNDERUNGEN (PRIO 1 Optimierung):
-- Vollständige Docstrings mit Args, Returns, Examples
-- Exit-Marker explizit definiert (__CHART__, Emojis, Fehler)
-- Fehlerbehandlung dokumentiert
-- Default-Verhalten beschrieben
-"""
-
 import os
 import sys
 import traceback
@@ -28,13 +15,13 @@ matplotlib.use("Agg")
 
 def create_chart_creation_tool(collection: Chroma):
     """
-    Factory für feedback_analytics Tool mit injizierter Collection.
+    Factory for feedback_analytics tool with injected collection.
 
     Args:
-        collection: ChromaDB Collection (Referenz!)
+        collection: ChromaDB Collection (reference!)
 
     Returns:
-        function_tool: Konfiguriertes Analytics Tool
+        function_tool: Configured Analytics Tool
     """
 
     # ✅ DEBUG: Validiere Collection beim Tool-Erstellen
@@ -64,45 +51,46 @@ def create_chart_creation_tool(collection: Chroma):
         date_to: Optional[str] = None,
     ) -> str:
         """
-        Erstellt Visualisierungen aus Customer-Feedback-Daten.
+        Creates visualizations from customer feedback data.
 
         Args:
-            analysis_type (str): Chart-Typ. Optionen:
+            analysis_type (str): Chart type. Options:
                 Sentiment: "sentiment_bar_chart", "sentiment_pie_chart"
                 NPS: "nps_bar_chart", "nps_pie_chart"
-                Markt: "market_bar_chart", "market_pie_chart", 
+                Market: "market_bar_chart", "market_pie_chart", 
                        "market_sentiment_breakdown", "market_nps_breakdown"
-                Spezial: "time_analysis", "overview"
+                Special: "time_analysis", "overview"
                 Default: "sentiment_chart"
             
-            query (str, optional): Semantische Filter-Query (z.B. "Lieferprobleme").
-                Leer = alle Daten. Default: ""
+            query (str, optional): Semantic filter query (e.g. "Lieferprobleme").
+                Empty = all data. Default: ""
             
-            market_filter (str, optional): Markt-Filter (z.B. "C1-DE"). 
-                None = alle Märkte. Default: None
+            market_filter (str, optional): Market filter (e.g. "C1-DE"). 
+                None = all markets. Default: None
             
-            region_filter (str, optional): Regions-Filter (z.B. "C1", "CE"). 
-                None = alle Regionen. Default: None
+            region_filter (str, optional): Region filter (e.g. "C1", "CE"). 
+                None = all regions. Default: None
             
-            country_filter (str, optional): Länder-Filter (ISO-Code z.B. "DE", "IT"). 
-                None = alle Länder. Default: None
+            country_filter (str, optional): Country filter (ISO code e.g. "DE", "IT"). 
+                None = all countries. Default: None
             
-            sentiment_filter (str, optional): Sentiment-Filter 
-                ("positiv"/"negativ"/"neutral"). Default: None
+            sentiment_filter (str, optional): Sentiment filter 
+                ("positiv"/"negativ"/"neutral" - German values!). Default: None
             
-            nps_filter (str, optional): NPS-Kategorie 
+            nps_filter (str, optional): NPS category 
                 ("Promoter"/"Passive"/"Detractor"). Default: None
             
-            topic_filter (str, optional): Topic-Filter 
-                (z.B. "Service", "Lieferproblem", "Produktqualität"). Default: None
+            topic_filter (str, optional): Topic filter 
+                (e.g. "Service", "Lieferproblem", "Produktqualität" - German values!). 
+                Default: None
             
-            date_from (str, optional): Start-Datum "YYYY-MM-DD". Default: None
-            date_to (str, optional): End-Datum "YYYY-MM-DD". Default: None
+            date_from (str, optional): Start date "YYYY-MM-DD". Default: None
+            date_to (str, optional): End date "YYYY-MM-DD". Default: None
 
         Returns:
-            str: Text-Beschreibung + Chart-Pfad im Format:
-                "[Beschreibung]\\n__CHART__[pfad.png]__CHART__"
-                Bei Fehlern: "❌ Error: ..." oder "ℹ️ Keine Daten..."
+            str: Text description + chart path in format:
+                "[Description]\\n__CHART__[path.png]__CHART__"
+                On errors: "❌ Error: ..." or "ℹ️ Keine Daten..."
 
         Examples:
             >>> feedback_analytics("sentiment_pie_chart", market_filter="C1-DE")
@@ -112,9 +100,12 @@ def create_chart_creation_tool(collection: Chroma):
             "NPS-Kategorien für 'Service'\\n__CHART__charts/nps_...png__CHART__"
 
         Notes:
-            - __CHART__ Marker ist kritisch für UI-Parsing
-            - Auto-Fallback bei ungültigem analysis_type (Query-basiert)
-            - Smart Validation verhindert sinnlose Charts (z.B. Market-Chart mit 1 Markt)
+            - IMPORTANT: Filter values are in GERMAN (data compatibility)
+              sentiment_filter: "positiv", "negativ", "neutral"
+              topic_filter: "Lieferproblem", "Service", "Terminvergabe", etc.
+            - __CHART__ marker is critical for UI parsing
+            - Auto-fallback for invalid analysis_type (query-based)
+            - Smart validation prevents meaningless charts (e.g. Market chart with 1 market)
         """
         try:
             # ✅ DEBUG: Log Tool-Aufruf
@@ -369,9 +360,20 @@ def create_chart_creation_tool(collection: Chroma):
 
 def _get_chart_path(chart_name: str) -> str:
     """
-    Erstellt eindeutigen Chart-Pfad mit Timestamp.
+    Creates unique chart path with timestamp.
 
-    ✅ WICHTIG: Nutzt immer Forward Slashes für Web-Kompatibilität!
+    Args:
+        chart_name (str): Base name for chart file (e.g. "sentiment_bar", "nps_pie").
+
+    Returns:
+        str: Absolute path to chart file in charts/ directory.
+            Format: "charts/{chart_name}_{timestamp}.png"
+            Example: "charts/sentiment_bar_20231015_143022_12.png"
+
+    Notes:
+        - Uses ABSOLUTE path for secure Streamlit display
+        - Timestamp format: YYYYMMDD_HHMMSS_MS (17 chars)
+        - Auto-creates charts/ directory if not exists
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:17]
     chart_filename = f"{chart_name}_{timestamp}.png"
@@ -381,6 +383,9 @@ def _get_chart_path(chart_name: str) -> str:
 
     # ✅ Nutze os.path.join für OS-unabhängigen Pfad
     chart_path = os.path.join(chart_dir, chart_filename)
+    
+    # ✅ KRITISCH: Konvertiere zu ABSOLUTEM Pfad für Streamlit
+    chart_path = os.path.abspath(chart_path)
 
     # ✅ KRITISCH: Konvertiere zu Forward Slashes für Streamlit/Web
     chart_path = chart_path.replace("\\", "/")
@@ -404,12 +409,32 @@ def _get_filtered_data(
     date_to: Optional[str],
 ) -> Dict:
     """
-    Holt gefilterte Daten aus Collection mit erweiterten Filtern.
+    Fetches filtered data from collection with extended filters.
     
-    Unterstützt Filterung nach:
-    - Market, Region, Country (geografisch)
-    - Sentiment, NPS, Topic (analytisch)
-    - Datum (zeitlich)
+    Args:
+        collection (Chroma): ChromaDB collection instance.
+        query (str): Semantic search query (empty = all data).
+        market_filter (str | None): Market filter (e.g. "C1-DE").
+        region_filter (str | None): Region filter (e.g. "C1", "CE").
+        country_filter (str | None): Country filter (ISO code, e.g. "DE").
+        sentiment_filter (str | None): Sentiment ("positiv"/"negativ"/"neutral").
+        nps_filter (str | None): NPS category ("Promoter"/"Passive"/"Detractor").
+        topic_filter (str | None): Topic (e.g. "Service", "Lieferproblem").
+        date_from (str | None): Start date "YYYY-MM-DD".
+        date_to (str | None): End date "YYYY-MM-DD".
+
+    Returns:
+        Dict: Collection query result with keys:
+            - ids (list[str]): Document IDs
+            - metadatas (list[dict]): Metadata for each document
+            - documents (list[str]): Verbatim texts
+            - distances (list[float] | None): Similarity scores (if query used)
+
+    Notes:
+        - Supports filtering by: Market, Region, Country, Sentiment, NPS, Topic, Date
+        - Empty query: Returns all documents matching filters
+        - Semantic query: Returns top 1000 most relevant results
+        - Date filters use $gte (>=) and $lte (<=) operators
     """
     try:
         print("   🔍 Filter-Setup:")
@@ -541,7 +566,24 @@ def _get_filtered_data(
 
 
 def _create_sentiment_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Bar Chart für Sentiment-Verteilung."""
+    """
+    Creates bar chart for sentiment distribution.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'sentiment_label' field
+
+    Returns:
+        Tuple[str, Optional[str]]: 
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Sentiment values: "positiv", "neutral", "negativ"
+        - Colors: Green (positiv), Yellow (neutral), Red (negativ)
+        - Shows counts and percentages
+        - Returns error if no data or metadata missing
+    """
     try:
         print("   🎨 Erstelle Sentiment Bar Chart...")
         sys.stdout.flush()
@@ -563,8 +605,8 @@ def _create_sentiment_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
         labels = [s for s in sentiment_order if s in sentiment_counts]
         counts = [sentiment_counts[s] for s in labels]
         
-        # Farben: Grün für Positiv, Grau für Neutral, Rot für Negativ
-        colors = ["#48dbfb", "#feca57", "#ff6b6b"]  # Blau/Gelb/Rot
+        # Farben: Grün für Positiv, Gelb für Neutral, Rot für Negativ
+        colors = ["#2ed573", "#feca57", "#ff6b6b"]  # Grün/Gelb/Rot
         bar_colors = [colors[sentiment_order.index(s)] for s in labels]
 
         bars = plt.bar(labels, counts, color=bar_colors, edgecolor='black', linewidth=1.2)
@@ -623,7 +665,24 @@ def _create_sentiment_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_sentiment_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Pie Chart für Sentiment-Verteilung."""
+    """
+    Creates pie chart for sentiment distribution.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'sentiment_label' field
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Sentiment values: "positiv", "neutral", "negativ"
+        - Colors: Green (positiv), Yellow (neutral), Red (negativ)
+        - Shows percentages on slices
+        - Returns error if no data or metadata missing
+    """
     try:
         print("   🎨 Erstelle Sentiment Pie Chart...")
         sys.stdout.flush()
@@ -639,7 +698,7 @@ def _create_sentiment_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
         sys.stdout.flush()
 
         plt.figure(figsize=(8, 6))
-        colors = ["#48dbfb", "#feca57", "#ff6b6b"]  # Blau/Gelb/Rot
+        colors = ["#2ed573", "#feca57", "#ff6b6b"]  # Grün/Gelb/Rot
 
         # Sortiere für konsistente Anzeige: Positiv, Neutral, Negativ
         sentiment_order = ["positiv", "neutral", "negativ"]
@@ -692,7 +751,24 @@ def _create_sentiment_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_nps_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt NPS Bar Chart"""
+    """
+    Creates bar chart for NPS category distribution.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'nps_category' field
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - NPS categories: "Detractor" (0-6), "Passive" (7-8), "Promoter" (9-10)
+        - Colors: Red (Detractor), Yellow (Passive), Green (Promoter)
+        - Shows counts and percentages
+        - Returns error if no data or metadata missing
+    """
     try:
         print("   🎨 Erstelle NPS Bar Chart...")
         sys.stdout.flush()
@@ -707,7 +783,7 @@ def _create_nps_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
         plt.figure(figsize=(10, 6))
         labels = list(category_counts.keys())
         counts = list(category_counts.values())
-        colors = ["#ff6b6b", "#feca57", "#48dbfb"]
+        colors = ["#ff6b6b", "#feca57", "#2ed573"]  # Rot/Gelb/Grün
 
         bars = plt.bar(labels, counts, color=colors[: len(labels)])
         plt.title("NPS Category Distribution", fontsize=14, fontweight="bold")
@@ -751,7 +827,24 @@ def _create_nps_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_nps_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt NPS Pie Chart"""
+    """
+    Creates pie chart for NPS category distribution.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'nps_category' field
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - NPS categories: "Detractor" (0-6), "Passive" (7-8), "Promoter" (9-10)
+        - Colors: Red (Detractor), Yellow (Passive), Green (Promoter)
+        - Shows percentages on slices
+        - Returns error if no data or metadata missing
+    """
     try:
         print("   🎨 Erstelle NPS Pie Chart...")
         sys.stdout.flush()
@@ -769,7 +862,7 @@ def _create_nps_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
         nps_order = ["Promoter", "Passive", "Detractor"]
         labels = [cat for cat in nps_order if cat in category_counts]
         sizes = [category_counts[cat] for cat in labels]
-        colors = ["#48dbfb", "#feca57", "#ff6b6b"]  # Blau/Gelb/Rot
+        colors = ["#2ed573", "#feca57", "#ff6b6b"]  # Grün/Gelb/Rot
 
         plt.pie(
             sizes,
@@ -806,7 +899,24 @@ def _create_nps_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_market_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Bar Chart für Market-Volumen."""
+    """
+    Creates bar chart for market volume distribution.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'market' field
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Shows feedback count per market (e.g. "C1-DE", "CE-IT")
+        - Sorted by volume (descending)
+        - Shows counts and percentages
+        - Returns error if <2 markets (chart not useful)
+    """
     try:
         print("   🎨 Erstelle Market Bar Chart...")
         sys.stdout.flush()
@@ -872,7 +982,23 @@ def _create_market_bar_chart(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_market_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Pie Chart für Market-Anteile."""
+    """
+    Creates pie chart for market share distribution.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'market' field
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Shows feedback percentage per market (e.g. "C1-DE", "CE-IT")
+        - Shows percentages on slices
+        - Returns error if <2 markets (chart not useful)
+    """
     try:
         print("   🎨 Erstelle Market Pie Chart...")
         sys.stdout.flush()
@@ -928,7 +1054,24 @@ def _create_market_pie_chart(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_market_sentiment_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Grouped Bar Chart - Sentiment pro Market."""
+    """
+    Creates grouped bar chart showing sentiment distribution per market.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'market' and 'sentiment_label' fields
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Shows sentiment breakdown (positiv/neutral/negativ) for each market
+        - Colors: Green (positiv), Yellow (neutral), Red (negativ)
+        - Markets sorted alphabetically
+        - Returns error if <2 markets (chart not useful)
+    """
     try:
         import numpy as np
 
@@ -962,7 +1105,7 @@ def _create_market_sentiment_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
         
         x = np.arange(len(markets))
         width = 0.25
-        colors = ["#48dbfb", "#feca57", "#ff6b6b"]  # Blau, Gelb, Rot
+        colors = ["#2ed573", "#feca57", "#ff6b6b"]  # Grün/Gelb/Rot
 
         for i, sentiment in enumerate(sentiments):
             counts = [market_sentiment_data[market][sentiment] for market in markets]
@@ -1021,7 +1164,24 @@ def _create_market_sentiment_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_market_nps_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Grouped Bar Chart - NPS-Kategorien pro Market."""
+    """
+    Creates grouped bar chart showing NPS category distribution per market.
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'market' and 'nps_category' fields
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Shows NPS breakdown (Detractor/Passive/Promoter) for each market
+        - Colors: Red (Detractor), Yellow (Passive), Green (Promoter)
+        - Markets sorted alphabetically
+        - Returns error if <2 markets (chart not useful)
+    """
     try:
         import numpy as np
 
@@ -1064,7 +1224,7 @@ def _create_market_nps_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
             sizes = [market_data.get(cat, 0) for cat in categories]
-            colors = ["#ff6b6b", "#feca57", "#48dbfb"]
+            colors = ["#ff6b6b", "#feca57", "#2ed573"]  # Rot/Gelb/Grün
 
             wedges, texts, autotexts = ax1.pie(
                 sizes,
@@ -1110,7 +1270,7 @@ def _create_market_nps_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
 
             x = np.arange(len(markets))
             width = 0.25
-            colors = ["#ff6b6b", "#feca57", "#48dbfb"]
+            colors = ["#ff6b6b", "#feca57", "#2ed573"]  # Rot/Gelb/Grün
 
             for i, (category, values) in enumerate(zip(categories, data_matrix)):
                 bars = ax.bar(
@@ -1192,7 +1352,25 @@ def _create_market_nps_breakdown(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_time_analysis(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Timeline-Analyse mit mehreren Charts."""
+    """
+    Creates timeline analysis with multiple charts (trends over time).
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'date_str', 'sentiment_label', 
+              'nps_category', and 'nps' fields
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Creates 4 subplots: Volume trend, Sentiment trend, NPS categories, NPS score
+        - Date format: "YYYY-MM-DD" parsed from 'date_str'
+        - Monthly aggregation for clearer trends
+        - Returns error if no temporal data available
+    """
     try:
         print("   🎨 Erstelle Time Analysis Charts...")
         sys.stdout.flush()
@@ -1263,7 +1441,7 @@ def _create_time_analysis(data: Dict) -> Tuple[str, Optional[str]]:
             nps_monthly[item["year_month"]][item["nps_category"]] += 1
 
         categories = ["Detractor", "Passive", "Promoter"]
-        colors = ["#ff6b6b", "#feca57", "#48dbfb"]
+        colors = ["#ff6b6b", "#feca57", "#2ed573"]  # Rot/Gelb/Grün
 
         for i, category in enumerate(categories):
             category_counts = [
@@ -1416,7 +1594,24 @@ def _create_time_analysis(data: Dict) -> Tuple[str, Optional[str]]:
 
 
 def _create_overview_charts(data: Dict) -> Tuple[str, Optional[str]]:
-    """Erstellt Overview mit 4 Charts."""
+    """
+    Creates overview dashboard with 4 charts (comprehensive summary).
+
+    Args:
+        data (Dict): Collection query result with keys:
+            - metadatas (list[dict]): Metadata containing 'sentiment_label', 'nps_category',
+              'market', and 'topic' fields
+
+    Returns:
+        Tuple[str, Optional[str]]:
+            - str: Status message or description
+            - Optional[str]: Chart path if successful, None on error
+
+    Notes:
+        - Creates 2x2 grid: Sentiment pie, NPS pie, Market distribution, Topic distribution
+        - Comprehensive overview for executive summaries
+        - Returns error if no data available
+    """
     try:
         print("   🎨 Erstelle Overview Dashboard...")
         sys.stdout.flush()

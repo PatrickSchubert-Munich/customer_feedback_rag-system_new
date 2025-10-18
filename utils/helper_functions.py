@@ -54,8 +54,9 @@ def check_vectorstore_exists(
         if not os.path.exists(vectorstore_full_path):
             return (False, 0)
         
-        # Prüfe ob Collection existiert
-        client = chromadb.PersistentClient(path=vectorstore_path)
+        # ✅ FIX: ChromaDB Client muss auf den feedback_vectorstore Pfad zeigen!
+        # Die Collections liegen in ./chroma/feedback_vectorstore, nicht in ./chroma
+        client = chromadb.PersistentClient(path=vectorstore_full_path)
         collections = client.list_collections()
         
         for collection in collections:
@@ -602,12 +603,15 @@ async def process_query_streamed(
             elif event.type == "agent_updated_stream_event":
                 agent_name = event.new_agent.name
         
-        # Nach Streaming: final_output ist jetzt verfügbar (wurde während Streaming aktualisiert)
+        # ✅ NACH Streaming: final_output ist jetzt verfügbar
+        # Verwende result.final_output falls vorhanden, sonst fallback zu full_text
+        final_output = result.final_output if result.final_output is not None else "".join(full_text)
+        
         yield {
             "type": "final_result",
-            "final_output": str(result.final_output),
+            "final_output": final_output,
             "agent_name": agent_name or (result.last_agent.name if result.last_agent else 'Assistant'),
-            "full_text": "".join(full_text)
+            "full_text": "".join(full_text)  # Für Debugging/Vergleich
         }
 
     except Exception as e:
