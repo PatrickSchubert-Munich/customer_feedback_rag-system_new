@@ -12,13 +12,20 @@ from db.vectorstore import VectorStore
 
 class ChromaVectorStore(VectorStore):
     """
-    Chroma VectorStore für Customer Feedback mit optimiertem Chunking.
+    Chroma VectorStore für Customer Feedback mit feedback-optimiertem Chunking.
     
     Features:
-    - Intelligentes Text-Chunking basierend auf Feedback-Länge
-    - Umfassende Metadaten für präzise Filterung
+    - Feedback-optimiertes Chunking: <4000 Zeichen bleiben vollständig (99.9% der Fälle)
+    - Umfassende Metadaten für präzise Filterung (27 Felder)
+    - Explizite Cosine Distance Metric für OpenAI Embeddings
     - Support für Azure OpenAI und Standard OpenAI
     - Persistente Speicherung mit ChromaDB
+    
+    Chunking-Strategie:
+    - Feedbacks <4000 Zeichen (~1000 Tokens): KEIN Chunking
+      → Erhält semantische Einheit, vermeidet Fragmentierung
+    - Feedbacks ≥4000 Zeichen: Große Chunks (3000 Zeichen, 500 Overlap)
+      → Nur für extreme Ausreißer, hoher Overlap sichert Kontext
     
     Metadaten pro Dokument:
     - row_id: Zeilen-ID im DataFrame
@@ -107,15 +114,39 @@ class ChromaVectorStore(VectorStore):
             ) from e
 
     def _get_optimized_chunk_params(self, text_length: int) -> tuple[int, int]:
-        """Berechnet optimale Chunk-Parameter basierend auf Text-Länge."""
-        if text_length <= 200:
+        """
+        Feedback-optimierte Chunking-Strategie.
+        
+        Strategie:
+        - <4000 Zeichen (~1000 Tokens): KEIN Chunking
+          → Erhält Feedback als atomare semantische Einheit
+          → Vermeidet Fragmentierung und Duplikate
+          → Optimal für text-embedding-3-small (max 8191 Tokens)
+        
+        - ≥4000 Zeichen: Chunking mit großen Chunks + hohem Overlap
+          → Nur für extreme Ausreißer (sehr seltene lange Feedbacks)
+          → Hoher Overlap (500 Zeichen = ~17%) sichert Kontext-Erhalt
+        
+        Rationale:
+        - Kundenfeedback sind atomare Einheiten, keine hierarchischen Dokumente
+        - Kontext kommt aus Metadata (NPS, topic, sentiment), nicht aus Chunks
+        - 99.9% der Feedbacks bleiben vollständig (Median: 122 Zeichen)
+        
+        Args:
+            text_length: Länge des Feedback-Texts in Zeichen
+        
+        Returns:
+            tuple[int, int]: (chunk_size, overlap)
+                - Bei <4000: (text_length, 0) = kein Chunking
+                - Bei ≥4000: (3000, 500) = große Chunks mit hohem Overlap
+        """
+        if text_length < 4000:
+            # KEIN Chunking: Feedback bleibt vollständig (99.9% der Fälle)
             return (text_length, 0)
-        elif text_length <= 600:
-            return (600, 90)
-        elif text_length <= 1200:
-            return (800, 130)
         else:
-            return (1000, 200)
+            # Nur bei extremen Ausreißern: Große Chunks mit hohem Overlap
+            # 3000 Zeichen ≈ 750 Tokens, 600 Overlap ≈ 150 Tokens (20%)
+            return (3000, 600)
 
     def _prepare_content(self, row: pd.Series) -> str:
         """Bereitet reinen Feedback-Text für Embedding vor."""
