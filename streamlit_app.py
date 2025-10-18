@@ -47,7 +47,7 @@ FILE_PATH_CSV = FILE_PATH_SYNTHETIC if USE_SYNTHETIC_DATA else FILE_PATH_ORIGINA
 VECTORSTORE_TYPE = "chroma"
 VECTORSTORE_PATH = "./chroma"
 VECTORSTORE_COLLECTION_NAME = "feedback_data"
-CREATE_NEW_STORE = False
+FORCE_RECREATE_VECTORSTORE = False  # ⚠️ ACHTUNG: True = VectorStore wird IMMER neu erstellt (löscht alte Daten!)
 
 # AZURE OPENAI OR OPENAI - Automatische Erkennung basierend auf Umgebungsvariablen
 IS_AZURE_OPENAI = is_azure_openai()
@@ -99,7 +99,7 @@ def get_cached_conversation_stats():
     return st.session_state.conversation.get_summary_stats()
 
 
-def render_chart(chart_path: str, size: str = "Mittel") -> None:
+def render_chart(chart_path: str, size: str = "Mittel"):
     """
     Zeigt Chart mit gewählter Größe an (Klein/Mittel/Groß).
     
@@ -107,6 +107,10 @@ def render_chart(chart_path: str, size: str = "Mittel") -> None:
         chart_path: Pfad zum Chart
         size: Größe ("Klein", "Mittel", "Groß")
     """
+    # Konvertiere relativen Pfad zu absolutem Pfad
+    if not os.path.isabs(chart_path):
+        chart_path = os.path.abspath(chart_path)
+    
     if not os.path.exists(chart_path):
         st.warning(f"⚠️ Chart nicht gefunden: {os.path.basename(chart_path)}")
         return
@@ -161,72 +165,80 @@ async def stream_agent_response(customer_manager, user_input: str, session, hist
 def process_user_query(user_input: str) -> None:
     """
     Verarbeitet eine Benutzereingabe mit ECHTEM Token-Streaming.
-    Flow: Zeige Frage → Zeige "Thinking..." → Stream Tokens → Speichere in History
+    Flow: Stream Response → Speichere in History → Streamlit rerun zeigt aus History
+    
+    WICHTIG: Nachrichten werden NICHT direkt angezeigt, sondern nur zur History
+    hinzugefügt. Die Anzeige erfolgt dann aus der History beim nächsten Rerun.
+    Dies verhindert Duplikate und sorgt für korrekte Nachrichten-Reihenfolge.
     """
     # Ensure session is initialized
     session = ensure_session_initialized()
 
-    # 1. Zeige User-Frage sofort an
-    with st.chat_message("user", avatar="🧑"):
-        st.write(user_input)
-
-    # 2. Zeige "Thinking..." und streame Response
-    with st.chat_message("assistant", avatar="🧠"):
-        placeholder = st.empty()
-        placeholder.markdown("_Thinking..._")
-        
-        # ✅ ECHTES Token-Streaming von OpenAI API
-        streamed_text = placeholder.write_stream(
-            stream_agent_response(
-                st.session_state.customer_manager,
-                user_input,
-                session,
-                HISTORY_LIMIT
+    # ✅ Zeige "Thinking..." Placeholder während des Streamings
+    thinking_placeholder = st.empty()
+    with thinking_placeholder.container():
+        with st.chat_message("user", avatar="🧑"):
+            st.write(user_input)
+        with st.chat_message("assistant", avatar="🧠"):
+            response_placeholder = st.empty()
+            response_placeholder.markdown("_Thinking..._")
+            
+            # ✅ ECHTES Token-Streaming von OpenAI API
+            streamed_text = response_placeholder.write_stream(
+                stream_agent_response(
+                    st.session_state.customer_manager,
+                    user_input,
+                    session,
+                    HISTORY_LIMIT
+                )
             )
-        )
         
-        # Nach Streaming: Hole Final Result
-        final_result = st.session_state.get('_streaming_final_result', None)
+    # Nach Streaming: Hole Final Result
+    final_result = st.session_state.get('_streaming_final_result', None)
+    
+    if final_result and final_result.get("type") == "error":
+        # Handle error case
+        error_message = f"**ERROR ({final_result.get('error_type', 'Unknown')}):** {final_result['error']}"
+        response_placeholder.error(error_message)
+        response_content = error_message
+        agent_name_str = "Assistant"
+    elif final_result:
+        # Handle success case
+        raw_response = final_result.get('final_output', streamed_text)
+        agent_name_str = final_result.get('agent_name', 'Assistant')
         
-        if final_result and final_result.get("type") == "error":
-            # Handle error case
-            error_message = f"**ERROR ({final_result.get('error_type', 'Unknown')}):** {final_result['error']}"
-            placeholder.error(error_message)
-            response_content = error_message
-            agent_name_str = "Assistant"
-        elif final_result:
-            # Handle success case
-            raw_response = final_result.get('final_output', streamed_text)
-            agent_name_str = final_result.get('agent_name', 'Assistant')
-            
-            # ✅ Chart-Erkennung: Extrahiere Chart-Pfad falls vorhanden
-            text_content, chart_path = extract_chart_path(raw_response)
-            
-            # Update display mit korrekt formatiertem Markdown (falls Streaming rohen Text hatte)
-            placeholder.empty()
-            placeholder.markdown(text_content)
-            
-            # ✅ Chart-Anzeige: Zeige Chart falls vorhanden
-            if chart_path:
-                chart_size = st.session_state.get('chart_size', 'Mittel')
-                render_chart(chart_path, size=chart_size)
-            
-            # ✅ WICHTIG: Speichere RAW response MIT Chart-Marker für History
-            response_content = raw_response
-        else:
-            # Fallback (sollte nicht vorkommen)
-            response_content = streamed_text
-            agent_name_str = "Assistant"
+        # ✅ Chart-Erkennung: Extrahiere Chart-Pfad falls vorhanden
+        text_content, chart_path = extract_chart_path(raw_response)
         
-        # Cleanup temporary state
-        if '_streaming_final_result' in st.session_state:
-            del st.session_state._streaming_final_result
+        # Update display mit korrekt formatiertem Markdown (falls Streaming rohen Text hatte)
+        response_placeholder.empty()
+        response_placeholder.markdown(text_content)
         
-        # ✅ Add to conversation history with actual agent name
-        st.session_state.conversation.add_interaction(
-            user_input=user_input,
-            agent_response=response_content,
-            agent_name=agent_name_str)
+        # ✅ Chart-Anzeige: Zeige Chart falls vorhanden
+        if chart_path:
+            chart_size = st.session_state.get('chart_size', 'Mittel')
+            render_chart(chart_path, size=chart_size)
+        
+        # ✅ WICHTIG: Speichere RAW response MIT Chart-Marker für History
+        response_content = raw_response
+    else:
+        # Fallback (sollte nicht vorkommen)
+        response_content = streamed_text
+        agent_name_str = "Assistant"
+    
+    # Cleanup temporary state
+    if '_streaming_final_result' in st.session_state:
+        del st.session_state._streaming_final_result
+    
+    # ✅ Add to conversation history with actual agent name
+    st.session_state.conversation.add_interaction(
+        user_input=user_input,
+        agent_response=response_content,
+        agent_name=agent_name_str)
+    
+    # ✅ Lösche den Thinking-Placeholder nach dem Hinzufügen zur History
+    # So wird beim nächsten Rerun nur die History angezeigt (ohne Duplikate)
+    thinking_placeholder.empty()
 
 
 @st.cache_resource(show_spinner=False)
@@ -246,7 +258,7 @@ def initialize_system_cached(is_azure_openai: bool=False, csv_path: str=FILE_PAT
             is_azure_openai=is_azure_openai,
             csv_path=csv_path,
             vectorstore_type=VECTORSTORE_TYPE,
-            create_new_store=CREATE_NEW_STORE,
+            create_new_store=False,  # Gecachte Version lädt immer existierenden VectorStore
             embedding_model="text-embedding-ada-002",
             is_synthetic_data=is_synthetic
         )
@@ -275,8 +287,7 @@ def main():
 
     # Page config
     st.set_page_config(
-        page_title="Customer Feedback RAG Chat",
-        page_icon="💬",
+        page_title="Customer Feedback App",
         layout="wide",
         initial_sidebar_state="collapsed",
     )
@@ -325,7 +336,16 @@ def main():
         )
         
         # Bestimme ob VectorStore neu erstellt werden muss
-        create_new_vectorstore = not vectorstore_exists or vectorstore_count == 0
+        # LOGIK:
+        # 1. FORCE_RECREATE_VECTORSTORE = True → IMMER neu erstellen
+        # 2. VectorStore existiert nicht → neu erstellen
+        # 3. VectorStore ist leer (count == 0) → neu erstellen
+        # 4. Sonst → existierenden laden
+        create_new_vectorstore = (
+            FORCE_RECREATE_VECTORSTORE or 
+            not vectorstore_exists or 
+            vectorstore_count == 0
+        )
         
         if create_new_vectorstore:
             # VectorStore muss (neu) erstellt werden
@@ -452,7 +472,10 @@ def main():
     history = st.session_state.conversation.get_history()
     
     # Chat container with all messages (static display)
-    for _ , entry in enumerate(history):
+    # Show all history EXCEPT the last interaction if we're currently processing
+    history_to_show = history
+    
+    for _ , entry in enumerate(history_to_show):
         # User message
         with st.chat_message(name="user", avatar="🧑"):
             st.write(entry["user"])
@@ -465,6 +488,7 @@ def main():
             else:
                 # ✅ Check for charts in history
                 text_content, chart_path = extract_chart_path(response_text)
+                
                 st.markdown(text_content)
                 
                 # ✅ Render chart if found in history
