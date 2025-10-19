@@ -444,7 +444,7 @@ def main():
             st.write(f"Avg Response: {stats['avg_response_length']} tokens")
             st.write("**Used Agents:**")
             for agent, count in stats["agents_used"].items():
-                st.write(f"• {agent}: {count}x")
+                st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;• {agent}: {count}x", unsafe_allow_html=True)
 
 # ============================================================================
 # CHAT HISTORY DISPLAY - Shows all previous messages
