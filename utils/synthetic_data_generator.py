@@ -1726,27 +1726,29 @@ class AdvancedSyntheticFeedbackGenerator:
         self,
         n_samples: int = 5000,
         start_date: str = '2020-01-01',
-        end_date: str = '2024-12-31',
-        ensure_diversity: bool = True,
-        include_metadata: bool = True
+        end_date: str = '2024-12-31'
     ) -> pd.DataFrame:
         """
-        Generates enterprise-grade synthetic data.
+        Generates enterprise-grade synthetic data compatible with prepare_customer_data.py.
+        
+        IMPORTANT: Only generates columns that prepare_customer_data.py would create
+        from original data. This ensures compatibility when switching between
+        synthetic and original datasets.
+        
+        Diversity controls are always active to ensure high-quality, balanced datasets.
         
         Args:
             n_samples (int): Number of records to generate. Defaults to 5000
             start_date (str): Start date in format 'YYYY-MM-DD'. Defaults to '2020-01-01'
             end_date (str): End date in format 'YYYY-MM-DD'. Defaults to '2024-12-31'
-            ensure_diversity (bool): Enforce diversity controls. Defaults to True
-            include_metadata (bool): Include metadata columns. Defaults to True
             
         Returns:
-            pd.DataFrame: DataFrame with synthetic customer feedback data
+            pd.DataFrame: DataFrame with synthetic customer feedback data.
+                Columns match exactly what prepare_customer_data.py produces.
         """
         
         print(f">> Generiere {n_samples} synthetische Datensaetze...")
-        if ensure_diversity:
-            print("   >> Aktiviere Diversitaets-Kontrolle...")
+        print("   >> Diversitaets-Kontrolle aktiv...")
         print("   >> Anonymisierung aktiv...")
         
         data = []
@@ -1756,9 +1758,9 @@ class AdvancedSyntheticFeedbackGenerator:
         end = datetime.strptime(end_date, '%Y-%m-%d')
         date_range = (end - start).days
         
-        # Diversitäts-Kontrolle - initialisiere Cycles (auch wenn nicht verwendet)
+        # Diversitäts-Kontrolle - initialisiere Cycles für gleichmäßige Verteilung
         personas_cycle = itertools.cycle(self.personas.keys())
-        markets_cycle = itertools.cycle(self.markets)  # Verwende neue markets Liste
+        markets_cycle = itertools.cycle(self.markets)
         topics_cycle = itertools.cycle(list(self.topics_hierarchy.keys()))
             
         for i in range(n_samples):
@@ -1766,12 +1768,9 @@ class AdvancedSyntheticFeedbackGenerator:
             if i % 500 == 0 and i > 0:
                 print(f"   >> {i}/{n_samples} Datensaetze generiert...")
                 
-            # Persona wählen
-            if ensure_diversity:
-                persona_name = next(personas_cycle)
-                persona = self.personas[persona_name]
-            else:
-                persona_name, persona = self._select_persona()
+            # Persona wählen - immer mit Diversity-Kontrolle
+            persona_name = next(personas_cycle)
+            persona = self.personas[persona_name]
                 
             # NPS Score - MIT GEWICHTEN aus Analyse (16.8% / 27.4% / 55.8%)
             nps_category = np.random.choice(
@@ -1780,11 +1779,8 @@ class AdvancedSyntheticFeedbackGenerator:
             )
             nps_score = random.choice(self.nps_distribution[nps_category])
             
-            # Market - KORREKTES FORMAT: Region-Country
-            if ensure_diversity:
-                market = next(markets_cycle)
-            else:
-                market = random.choice(self.markets)
+            # Market - KORREKTES FORMAT: Region-Country (immer mit Diversity-Kontrolle)
+            market = next(markets_cycle)
             
             # Extrahiere Region und Country aus Market
             market_info = self.market_mapping[market]
@@ -1799,11 +1795,8 @@ class AdvancedSyntheticFeedbackGenerator:
                 days_ago = random.randint(0, date_range)
             feedback_date = end - timedelta(days=days_ago)
             
-            # Topic und Subtopic
-            if ensure_diversity:
-                topic = next(topics_cycle)
-            else:
-                topic = random.choice(list(self.topics_hierarchy.keys()))
+            # Topic und Subtopic (immer mit Diversity-Kontrolle)
+            topic = next(topics_cycle)
             
             # NEU: Handle neue Topic-Struktur mit 'subtopics' und 'weight'
             topic_data = self.topics_hierarchy.get(topic, {})
@@ -1838,52 +1831,31 @@ class AdvancedSyntheticFeedbackGenerator:
             )
             
             # Metadaten
+            # WICHTIG: Nur Spalten die auch prepare_customer_data.py erzeugt!
+            # Kompatibilität mit originalen Daten sicherstellen
             record = {
-                # Kern-Daten
+                # Kern-Daten (wie in feedback_data.csv)
                 'feedback_id': self._generate_session_id(),
                 'customer_id': self._generate_customer_id(),
                 'NPS': nps_score,
                 'nps_category': nps_category,
                 'Market': market,
                 'Date': feedback_date.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
-                'Verbatim': verbatim,
+                'Verbatim': verbatim,  # Dealer-Namen sind HIER im Text!
                 
-                # Erweiterte Daten - verwende bereits extrahierte Werte
+                # Erweiterte Daten (von prepare_customer_data.py)
                 'region': region,
                 'country': country,
                 'topic': topic,
                 'subtopic': subtopic,
                 'sentiment_label': sentiment,
                 'sentiment_score': round(sentiment_score, 4),
+                'topic_confidence': round(random.uniform(0.7, 1.0), 2),
                 
-                # Text-Metriken
+                # Text-Metriken (von prepare_customer_data.py)
                 'Verbatim_token_count': len(verbatim.split()),
-                'Verbatim_char_count': len(verbatim),
-                
-                # Tracking
-                'dealership': random.choice(self.fake_dealerships),
-                'response_channel': random.choice(['Online', 'Email', 'App', 'Phone', 'In-Person']),
-                'survey_type': random.choice(['Post-Service', 'Annual', 'Transaction', 'Complaint']),
-                
-                # Quality Flags
-                'is_synthetic': True,  # Wichtig für Mixing mit echten Daten
-                'synthetic_version': '2.0',
-                'generation_timestamp': datetime.now().isoformat()
+                'Verbatim_char_count': len(verbatim)
             }
-            
-            # Zusätzliche Metadaten wenn gewünscht
-            if include_metadata:
-                record.update({
-                    'persona_type': persona_name,
-                    'age_group': persona.age_group,
-                    'tech_affinity': persona.tech_affinity,
-                    'communication_style': persona.communication_style,
-                    'topic_confidence': round(random.uniform(0.3, 1.0), 2),
-                    'response_time_seconds': random.randint(30, 600),
-                    'device_type': random.choice(['Desktop', 'Mobile', 'Tablet']),
-                    'browser': random.choice(['Chrome', 'Safari', 'Firefox', 'Edge']),
-                    'city': random.choice(self.fake_cities)
-                })
                 
             data.append(record)
             
@@ -2020,67 +1992,3 @@ class AdvancedSyntheticFeedbackGenerator:
                 }
                 
         return analysis
-
-
-def main():
-    """
-    Main function with extended features.
-    
-    Returns:
-        None
-    """
-    
-    print("="*60)
-    print("🚀 ENTERPRISE SYNTHETIC FEEDBACK GENERATOR v2.0")
-    print("="*60)
-    
-    # Initialisierung
-    generator = AdvancedSyntheticFeedbackGenerator(seed=42, enable_fun_mode=True)
-    
-    # Generiere große Datenmenge
-    print("\n📊 Phase 1: Generierung großer Datenmenge")
-    df_large = generator.generate_enterprise_dataset(
-        n_samples=5000,
-        start_date='2022-01-01',
-        end_date='2024-12-31',
-        ensure_diversity=True,
-        include_metadata=True
-    )
-    
-    # Erweiterte Analyse
-    print("\n📊 Phase 2: Erweiterte Bias-Analyse")
-    bias_analysis = generator.analyze_bias_advanced(df_large)
-    
-    print("\n📈 Analyse-Ergebnisse:")
-    print(f"   • Sentiment-Verteilung: {bias_analysis['basic_distributions']['sentiment']}")
-    
-    for test, result in bias_analysis['statistical_tests'].items():
-        print(f"   • {test}: {result['interpretation']} (p={result['p_value']:.4f})")
-        
-    for metric, result in bias_analysis['diversity_metrics'].items():
-        print(f"   • {metric} Diversität: {result['interpretation']} (Entropy={result['normalized_entropy']:.2f})")
-    
-    # Beispiel-Output
-    print("\n📄 Beispiel-Datensätze:")
-    print("="*60)
-    
-    # Zeige verschiedene Personas
-    for persona_type in ['digital_native', 'experienced_senior', 'busy_professional']:
-        sample = df_large[df_large['persona_type'] == persona_type].iloc[0]
-        print(f"\n👤 Persona: {persona_type}")
-        print(f"   NPS: {sample['NPS']} ({sample['nps_category']})")
-        print(f"   Topic: {sample['topic']} - {sample['subtopic']}")
-        print(f"   Sentiment: {sample['sentiment_label']} ({sample['sentiment_score']:.2f})")
-        print(f"   Werkstatt: {sample['dealership']}")
-        print(f"   Feedback: \"{sample['Verbatim'][:150]}...\"")
-    
-    print("\n="*60)
-    print("✅ GENERIERUNG ERFOLGREICH ABGESCHLOSSEN!")
-    print(f"   • {len(df_large)} Datensätze generiert")
-    print(f"   • {df_large['Verbatim'].nunique()} unique Texte")
-    print(f"   • {df_large['dealership'].nunique()} verschiedene Werkstätten")
-    print("="*60)
-
-
-if __name__ == "__main__":
-    main()
