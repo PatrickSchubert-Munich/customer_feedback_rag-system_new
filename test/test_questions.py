@@ -243,7 +243,9 @@ class CriticalMissingTests:
         "Entwicklung der NPS-Scores über das Jahr 2024",
     ]
 
-    # 3. DEALERSHIP-SPECIFIC (0% tested - aber in Metadaten!)
+    # 3. DEALERSHIP-SPECIFIC (LIMITATION TEST - Not in structured metadata!)
+    # These questions test if system correctly explains that dealer names
+    # are only in verbatim text, not as structured metadata for filtering/charts
     DEALERSHIP_QUESTIONS = [
         "Wie ist die Bewertung von 'Autohaus Goldgrube'?",
         "Vergleiche Service-Station Rakete mit Werkstatt Schraubenkönig",

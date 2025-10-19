@@ -20,7 +20,7 @@ class SearchToolFactory:
         @function_tool
         def search_customer_feedback(
             query: str,
-            max_results: int = 15,
+            max_results: int = 10,
             market_filter: str | None = None,
             region_filter: str | None = None,
             country_filter: str | None = None,
@@ -37,7 +37,8 @@ class SearchToolFactory:
                 query (str): Semantic search query in German or English.
                     Examples: "Lieferprobleme", "Service-Beschwerden", "positive Erfahrungen"
                     
-                max_results (int, optional): Number of results (3-50). Default: 15.
+                max_results (int, optional): Number of results (3-30). Default: 10.
+                    IMPORTANT: Use 10 as default unless user specifies explicit number!
                     For Top-N analyses set accordingly (e.g. "Top 5" → max_results=5)
                 
                 market_filter (str | None, optional): Market filter for specific market.
@@ -151,9 +152,9 @@ class SearchToolFactory:
             if max_results < 3:
                 return "❌ ERROR: max_results too small. Please use at least 3 results for meaningful analysis."
 
-            if max_results > 50:
-                return "⚠️  WARNING: max_results capped at 50 for performance. Using max_results=50 instead."
-                max_results = 50
+            if max_results > 30:
+                return "⚠️  WARNING: max_results capped at 30 for token efficiency. Using max_results=30 instead."
+                max_results = 30
 
             # Collection Validation
             if collection is None:
