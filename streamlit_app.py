@@ -163,15 +163,47 @@ async def stream_agent_response(customer_manager, user_input: str, session, hist
         history_limit (int): History limit for conversation context
     
     Yields:
-        str: Tokens for Streamlit streaming display
+        str: Tokens for Streamlit streaming display (WITHOUT chart markers)
     """
+    import re
+    buffer = ""  # Buffer to check for chart markers
+    
     async for chunk in process_query_streamed(customer_manager, user_input, session, history_limit):
         if isinstance(chunk, str):
-            # Token-by-Token Text - wird direkt gestreamt
-            yield chunk
+            # Add chunk to buffer
+            buffer += chunk
+            
+            # Check if buffer contains complete chart marker
+            if "__CHART__" in buffer:
+                # Extract text BEFORE chart marker
+                match = re.search(r'(.*?)__CHART__', buffer)
+                if match:
+                    # Yield text before marker
+                    text_before = match.group(1)
+                    if text_before:
+                        yield text_before
+                    
+                    # Remove everything up to and including the closing marker
+                    buffer = re.sub(r'.*?__CHART__.*?__CHART__', '', buffer, count=1)
+                else:
+                    # Incomplete marker, keep buffering
+                    pass
+            elif len(buffer) > 100:
+                # If buffer gets too large without marker, yield it
+                # (keep last 20 chars in case marker is split)
+                yield_text = buffer[:-20]
+                buffer = buffer[-20:]
+                yield yield_text
         elif isinstance(chunk, dict):
             # Final result oder Error - speichere für späteren Zugriff
             st.session_state._streaming_final_result = chunk
+    
+    # Yield any remaining buffer (without chart markers)
+    if buffer:
+        # Remove any chart markers from final buffer
+        clean_buffer = re.sub(r'__CHART__.*?__CHART__', '', buffer)
+        if clean_buffer.strip():
+            yield clean_buffer
 
 
 @st.cache_resource(show_spinner=False)
@@ -408,8 +440,8 @@ def main():
             st.divider()
             st.subheader("📊 Konversations-Summary")
             st.write(f"Interactions: {stats['total_interactions']}")
-            st.write(f"Avg Input: {stats['avg_user_input_length']} chars")
-            st.write(f"Avg Response: {stats['avg_response_length']} chars")
+            st.write(f"Avg Input: {stats['avg_user_input_length']} tokens")
+            st.write(f"Avg Response: {stats['avg_response_length']} tokens")
             st.write("Used Agents:")
             for agent, count in stats["agents_used"].items():
                 st.write(f"• {agent}: {count}x")
