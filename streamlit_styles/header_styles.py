@@ -36,7 +36,7 @@ def render_main_title() -> None:
         <span style="
             font-family: {TYPOGRAPHY["accent_font"]};
             color: {COLORS["primary_accent"]};
-        ">Analysis</span> 
+        ">Analyse</span> 
         Chat
     </h1>
     """
@@ -45,7 +45,7 @@ def render_main_title() -> None:
 
 
 def render_subtitle_with_typewriter(
-    text: str = "Ask me anything about your customer feedback data!",
+    text: str = "Frage mich alles zu deinen customer feedback Daten!",
     speed: float = 0.05,
     session_key: str = "typewriter_complete",
 ) -> None:

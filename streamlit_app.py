@@ -12,11 +12,13 @@ from dotenv import load_dotenv
 from utils.helper_functions import (
     is_azure_openai,
     check_vectorstore_exists,
-    extract_chart_path,
     extract_all_chart_paths,  # ✅ Für Multi-Chart Support
     process_query_streamed,  # ✅ Echtes Token-Streaming
     initialize_system
 )
+
+# Import chart cleanup utility
+from utils.chart_cleanup import cleanup_charts_if_enabled
 
 # Import test questions for example queries
 from test.test_questions import TestQuestions
@@ -28,6 +30,7 @@ from utils.simple_history import SimpleConversationHistory
 from streamlit_styles.header_styles import render_header_section
 from streamlit_styles.footer_styles import render_footer
 from streamlit_styles.layout_styles import apply_main_layout_styles
+from streamlit_styles.sidebar_styles import render_sidebar_content
 
 load_dotenv()
 
@@ -289,9 +292,9 @@ def main():
 
     with col_button:
         st.write("")  # Spacer for better alignment
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_header"):
+        if st.button("🗑️ Chat löschen", use_container_width=True, key="clear_chat_header"):
             st.session_state.conversation.clear_history()
-            st.toast("✅ Chat cleared!", icon="🗑️")
+            st.toast("✅ Chat gelöscht!", icon="🗑️")
             st.rerun()
 
     st.divider()
@@ -373,78 +376,18 @@ def main():
     # ============================================================================
 
     with st.sidebar:
-        # Predefined example queries - moved to top
-        st.subheader("💡 Example Queries")
-
-        # Use globally defined example queries from configuration section
-        for query in EXAMPLE_QUERIES:
-            # ✅ Set pending query in session state instead of callback
-            if st.button(query, key=f"sidebar_{query}", use_container_width=True):
-                st.session_state.pending_query = query
-                st.rerun()
-
-        st.divider()
-        
-        # ✅ Chart Size Selector (Clean & Simple)
-        st.subheader("📊 Chart-Größe")
-        
-        # Use radio buttons instead - no cutoff issues
-        chart_size = st.radio(
-            "Größe wählen",
-            options=["Klein", "Mittel", "Groß"],
-            index=1 if st.session_state.get('chart_size', 'Mittel') == 'Mittel' 
-                  else (0 if st.session_state.get('chart_size', 'Mittel') == 'Klein' else 2),
-            label_visibility="collapsed",
-            horizontal=True
+        render_sidebar_content(
+            example_queries=EXAMPLE_QUERIES,
+            get_stats_callback=get_cached_conversation_stats,
+            document_count=st.session_state.collection.count(),
+            history_limit=HISTORY_LIMIT
         )
-        st.session_state['chart_size'] = chart_size
-
-        st.divider()
-
-        # Export options
-        st.subheader("📄 Export Options")
-
-        if st.button("📋 Export as Text", use_container_width=True):
-            if st.session_state.conversation.get_conversation_count() > 0:
-                export_stats = get_cached_conversation_stats()
-                export_text = st.session_state.conversation.export_history("text")
-                st.download_button(
-                    "💾 Download Text",
-                    export_text,
-                    file_name=f"conversation_{export_stats['session_id']}.txt",
-                    mime="text/plain",
-                    use_container_width=True,
-                )
-            else:
-                st.warning("No conversation to export")
-
-        if st.button("🧹 Clear History", use_container_width=True):
-            st.session_state.conversation.clear_history()
-            st.rerun()
-
-        st.divider()
-        st.subheader("📈 System Info")
-
-        st.info(f"Documents: {st.session_state.collection.count():,}")
         
-        # History Limit Info
-        if HISTORY_LIMIT:
-            st.caption(f"💡 Historie-Limit: {HISTORY_LIMIT} Turns (spart Token-Kosten)")
-        else:
-            st.caption("⚠️ Historie unbegrenzt (höhere Token-Kosten)")
-
-        # Combined Conversation Statistics - moved to bottom
-        stats = get_cached_conversation_stats()
-
-        if stats["total_interactions"] > 0:
-            st.divider()
-            st.subheader("📊 Konversations-Summary")
-            st.write(f"Interactions: {stats['total_interactions']}")
-            st.write(f"Avg Input: {stats['avg_user_input_length']} tokens")
-            st.write(f"Avg Response: {stats['avg_response_length']} tokens")
-            st.write("**Used Agents:**")
-            for agent, count in stats["agents_used"].items():
-                st.write(f"&nbsp;&nbsp;&nbsp;&nbsp;• {agent}: {count}x", unsafe_allow_html=True)
+        # Run chart cleanup if enabled
+        if st.session_state.get('auto_delete_charts', False):
+            deleted, total = cleanup_charts_if_enabled(max_age_minutes=60)
+            if deleted > 0:
+                st.caption(f"🗑️ {deleted} alte Charts gelöscht")
 
 # ============================================================================
 # CHAT HISTORY DISPLAY - Shows all previous messages
@@ -486,7 +429,7 @@ def main():
         del st.session_state.pending_query
     else:
         # User input at the bottom of the page
-        user_input = st.chat_input("Ask about customer feedback...")
+        user_input = st.chat_input("Stelle Fragen zum customer feedback...")
 
     # ✅ Process query with LIVE streaming, then rerun
     if user_input:
@@ -500,7 +443,7 @@ def main():
             response_placeholder = st.empty()
             
             # ✅ Show "Thinking..." while waiting for first token
-            response_placeholder.markdown("_Thinking..._")
+            response_placeholder.markdown("Nachdenken läuft...")
             
             # ✅ LIVE Token-Streaming from OpenAI (replaces "Thinking...")
             streamed_text = response_placeholder.write_stream(
