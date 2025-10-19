@@ -442,7 +442,7 @@ def main():
             st.write(f"Interactions: {stats['total_interactions']}")
             st.write(f"Avg Input: {stats['avg_user_input_length']} tokens")
             st.write(f"Avg Response: {stats['avg_response_length']} tokens")
-            st.write("Used Agents:")
+            st.write("**Used Agents:**")
             for agent, count in stats["agents_used"].items():
                 st.write(f"• {agent}: {count}x")
 
