@@ -346,27 +346,11 @@ def create_chart_creation_tool(collection: Chroma):
             else:
                 return f"❌ Unbekannter Chart-Typ: {analysis_type}"
 
-            # ✅ DEBUG: Log Ergebnis
-            print(f"\n{'=' * 60}")
-            print("✅ CHART ERSTELLT")
-            print(f"{'=' * 60}")
-            print(f"   • Chart-Pfad: {chart_path}")
-            if chart_path:
-                print(f"   • File existiert: {os.path.exists(chart_path)}")
-                if os.path.exists(chart_path):
-                    print(f"   • File-Größe: {os.path.getsize(chart_path)} bytes")
-            print(f"{'=' * 60}\n")
-            sys.stdout.flush()
-
             # ✅ Chart-Marker für Streamlit-Parser hinzufügen
             if chart_path and os.path.exists(chart_path):
                 final_result = f"{text_result}\n__CHART__{chart_path}__CHART__"
-                print("📦 Returning result with chart marker")
-                sys.stdout.flush()
                 return final_result
             else:
-                print("⚠️ Returning result WITHOUT chart marker (no valid path)")
-                sys.stdout.flush()
                 return text_result
 
         except Exception as e:

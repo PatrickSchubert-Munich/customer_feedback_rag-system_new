@@ -5,6 +5,7 @@ Contains common functions, imports, and constants used across all chart types.
 """
 
 import os
+import sys
 from datetime import datetime
 import matplotlib
 
