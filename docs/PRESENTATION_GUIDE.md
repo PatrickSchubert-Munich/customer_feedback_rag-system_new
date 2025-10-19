@@ -42,44 +42,64 @@
 
 ## 🎯 Präsentationsstruktur
 
-### Empfohlener Aufbau (20 Minuten)
+### 📹 Videovortrag-Format (8-10 Minuten)
+
+**Format:** PowerPoint-Präsentation mit Screencast-Demo-Elementen
+
+**Struktur gemäß Vorgabe:**
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ 1. EINLEITUNG (3 Min)                                   │
-│    • Problem Statement                                  │
-│    • Motivation                                         │
-│    • Zielgruppe                                         │
+│ 1. MOTIVATION & PROBLEMSTELLUNG (2 Min)                 │
+│    • Das Problem: Manuelle Feedback-Analyse             │
+│    • Herausforderungen: Skalierung, Zeit, Kosten        │
+│    • Motivation: Warum KI-Lösung?                       │
+│    • Vorteile: Automatisierung, Effizienz, 24/7         │
 ├─────────────────────────────────────────────────────────┤
-│ 2. SYSTEM-ÜBERSICHT (4 Min)                            │
-│    • Architektur-Diagramm                               │
-│    • Technologie-Stack                                  │
-│    • Multi-Agent-Konzept                                │
+│ 2. VORGEHEN & HERANGEHENSWEISE (2 Min)                  │
+│    • Entwicklungsprozess: 11 Schritte                   │
+│    • Technologie-Entscheidungen mit Begründungen        │
+│    • Daten-Vorbereitung: Raw → Enriched → Vectorized    │
+│    • Architektur-Wahl: RAG + Multi-Agent                │
 ├─────────────────────────────────────────────────────────┤
-│ 3. LIVE DEMO (8 Min)                                    │
-│    • Szenario 1: Metadaten-Abfrage (schnell)          │
-│    • Szenario 2: Komplexe Analyse (beeindruckend)     │
-│    • Szenario 3: Visualisierung (wow-Effekt)          │
+│ 3. LÖSUNG / UMSETZUNG / KONZEPTDARSTELLUNG (4 Min)      │
+│    • System-Architektur (Multi-Agent-Diagramm)          │
+│    • Kernfeatures: 4 Hauptfunktionen                    │
+│    • LIVE DEMO (Screencast):                            │
+│      - Szenario 1: Metadaten (Speed)                    │
+│      - Szenario 2: Komplexe Analyse (Intelligence)      │
+│      - Szenario 3: Visualisierung (WOW)                 │
+│    • Technische Highlights: Performance & Optimierungen │
 ├─────────────────────────────────────────────────────────┤
-│ 4. TECHNISCHE HIGHLIGHTS (3 Min)                        │
-│    • RAG-Architektur                                    │
-│    • VectorStore & Embeddings                           │
-│    • Performance-Optimierungen                          │
-├─────────────────────────────────────────────────────────┤
-│ 5. AUSBLICK & Q&A (2 Min)                              │
-│    • Erweiterungsmöglichkeiten                          │
-│    • Lessons Learned                                    │
-│    • Fragen                                             │
+│ 4. REFLEXION & AUSBLICK (1.5 Min)                       │
+│    • Lessons Learned: Was funktioniert, was nicht       │
+│    • Herausforderungen & Lösungen                       │
+│    • Ausblick: Nächste Schritte & Future Work           │
+│    • Zusammenfassung in 4 Punkten                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Alternative: Kurze Präsentation (10 Minuten)
+**Zeitplan-Details:**
+
+| Zeit      | Slides | Inhalt                       | Typ   |
+| --------- | ------ | ---------------------------- | ----- |
+| 0:00-0:15 | 1      | Titel & Einführung           | Slide |
+| 0:15-1:15 | 2-3    | Problemstellung & Motivation | Slide |
+| 1:15-2:15 | 4-6    | Vorgehen & Herangehensweise  | Slide |
+| 2:15-3:00 | 7-8    | Architektur & Features       | Slide |
+| 3:00-5:30 | 9-11   | **LIVE DEMO** (Screencast)   | Video |
+| 5:30-6:00 | 12     | Performance-Highlights       | Slide |
+| 6:00-7:00 | 13-14  | Reflexion & Ausblick         | Slide |
+| 7:00-8:00 | 15-16  | Zusammenfassung & Q&A        | Slide |
+
+---
+
+### Alternative: Kompakte Version (5-7 Minuten)
 
 ```
-1. Problem & Lösung (2 Min)
-2. Live Demo (5 Min) - Nur die besten 2 Szenarien
-3. Technical Deep-Dive (2 Min) - Architektur-Highlight
-4. Q&A (1 Min)
+1. Motivation & Problem (1 Min)
+2. Lösung & Demo (4 Min) - Fokus auf Demo!
+3. Reflexion & Ausblick (1 Min)
 ```
 
 ---
@@ -220,14 +240,14 @@
 
 **Performance:**
 
-- "Semantische Suche in 1250+ Feedbacks in ~2 Sekunden"
+- "Semantische Suche in 10.000 Feedbacks in ~2 Sekunden"
 - "Batch-Embedding mit 100 Documents/Batch"
 - "Historie-Limiting für konstante Token-Kosten"
 - "Caching mit Streamlit @cache_resource"
 
 **Quality:**
 
-- "27 Metadata-Felder pro Feedback für präzise Filterung"
+- "16 Metadata-Felder pro Feedback für präzise Filterung"
 - "Confidence-Thresholds für Search-Quality-Assurance"
 - "VADER Sentiment-Analyse (rule-based, schnell)"
 - "Keyword-basierte Topic-Klassifikation"
@@ -575,7 +595,7 @@ FEATURES
 
 🔍 Semantische Suche
    • Versteht Bedeutung, nicht nur Keywords
-   • 27 Metadata-Filter (NPS, Sentiment, Market, ...)
+   • 16 Metadata-Filter (NPS, Sentiment, Market, Topic, Region, Country, etc.)
    • Confidence-basierte Qualitätssicherung
 
 📊 Auto-Visualisierung
@@ -608,7 +628,7 @@ Genauigkeit:
 88-94% Confidence-Scores in Practice
 
 Skalierbarkeit:
-Gleiche Performance für 100 oder 10.000 Feedbacks
+Getestet mit 10.000 Feedbacks
 Konstante Kosten durch Optimierungen
 
 ROI:
@@ -634,10 +654,10 @@ LESSONS LEARNED
    • Chart-Marker-Handling erfordert Sorgfalt
 
 🔮 Next Steps:
-   • PDF-Export von Reports
-   • Email-Notifications
-   • CRM-Integration
-   • Multi-Language UI
+   • Automatische Alerts bei kritischen Feedbacks
+   • Dashboard-Modus mit KPI-Übersicht
+   • Multi-Language UI (aktuell: Deutsch)
+   • Trend-Prediction mit Machine Learning
 ```
 
 ### Slide 8: Thank You
