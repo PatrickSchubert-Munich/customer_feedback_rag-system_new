@@ -13,6 +13,7 @@ from utils.helper_functions import (
     is_azure_openai,
     check_vectorstore_exists,
     extract_chart_path,
+    extract_all_chart_paths,  # ✅ Für Multi-Chart Support
     process_query_streamed,  # ✅ Echtes Token-Streaming
     initialize_system
 )
@@ -53,10 +54,10 @@ FORCE_RECREATE_VECTORSTORE = False  # ⚠️ ACHTUNG: True = VectorStore wird IM
 IS_AZURE_OPENAI = is_azure_openai()
 
 # HISTORY LIMIT - Begrenzt die Anzahl der Historie-Turns an die LLM
-# None = unbegrenzt (alle Historie wird gesendet)
-# 5 = nur die letzten 5 Interaktionen werden gesendet
-# Empfohlen: 3-5 für Balance zwischen Kontext und Kosten
-HISTORY_LIMIT = 5  # Begrenzt auf letzte 5 Interaktionen
+# None = unbegrenzt (alles wird gesendet)
+# 4 = nur die letzten 4 Interaktionen werden gesendet
+# Empfohlen: 3-5 für Balance zwischen Kontext und Token-Kosten
+HISTORY_LIMIT = 4
 
 # EXAMPLE QUERIES - Strategisch ausgewählte Fragen für maximalen "AHA-Effekt"
 EXAMPLE_QUERIES = [
@@ -171,91 +172,6 @@ async def stream_agent_response(customer_manager, user_input: str, session, hist
         elif isinstance(chunk, dict):
             # Final result oder Error - speichere für späteren Zugriff
             st.session_state._streaming_final_result = chunk
-
-
-def process_user_query(user_input: str) -> None:
-    """
-    Processes a user input with REAL token streaming.
-    Flow: Stream Response → Save to History → Streamlit rerun displays from History
-    
-    IMPORTANT: Messages are NOT displayed directly, but only added to history.
-    Display happens from history on next rerun. This prevents duplicates and
-    ensures correct message order.
-    
-    Args:
-        user_input (str): User input text to process
-    
-    Returns:
-        None
-    """
-    # Ensure session is initialized
-    session = ensure_session_initialized()
-
-    # ✅ Zeige "Thinking..." Placeholder während des Streamings
-    thinking_placeholder = st.empty()
-    with thinking_placeholder.container():
-        with st.chat_message("user", avatar="🧑"):
-            st.write(user_input)
-        with st.chat_message("assistant", avatar="🧠"):
-            response_placeholder = st.empty()
-            response_placeholder.markdown("_Thinking..._")
-            
-            # ✅ ECHTES Token-Streaming von OpenAI API
-            streamed_text = response_placeholder.write_stream(
-                stream_agent_response(
-                    st.session_state.customer_manager,
-                    user_input,
-                    session,
-                    HISTORY_LIMIT
-                )
-            )
-        
-    # Nach Streaming: Hole Final Result
-    final_result = st.session_state.get('_streaming_final_result', None)
-    
-    if final_result and final_result.get("type") == "error":
-        # Handle error case
-        error_message = f"**ERROR ({final_result.get('error_type', 'Unknown')}):** {final_result['error']}"
-        response_placeholder.error(error_message)
-        response_content = error_message
-        agent_name_str = "Assistant"
-    elif final_result:
-        # Handle success case
-        raw_response = final_result.get('final_output', streamed_text)
-        agent_name_str = final_result.get('agent_name', 'Assistant')
-        
-        # ✅ Chart-Erkennung: Extrahiere Chart-Pfad falls vorhanden
-        text_content, chart_path = extract_chart_path(raw_response)
-        
-        # Update display mit korrekt formatiertem Markdown (falls Streaming rohen Text hatte)
-        response_placeholder.empty()
-        response_placeholder.markdown(text_content)
-        
-        # ✅ Chart-Anzeige: Zeige Chart falls vorhanden
-        if chart_path:
-            chart_size = st.session_state.get('chart_size', 'Mittel')
-            render_chart(chart_path, size=chart_size)
-        
-        # ✅ WICHTIG: Speichere RAW response MIT Chart-Marker für History
-        response_content = raw_response
-    else:
-        # Fallback (sollte nicht vorkommen)
-        response_content = streamed_text
-        agent_name_str = "Assistant"
-    
-    # Cleanup temporary state
-    if '_streaming_final_result' in st.session_state:
-        del st.session_state._streaming_final_result
-    
-    # ✅ Add to conversation history with actual agent name
-    st.session_state.conversation.add_interaction(
-        user_input=user_input,
-        agent_response=response_content,
-        agent_name=agent_name_str)
-    
-    # ✅ Lösche den Thinking-Placeholder nach dem Hinzufügen zur History
-    # So wird beim nächsten Rerun nur die History angezeigt (ohne Duplikate)
-    thinking_placeholder.empty()
 
 
 @st.cache_resource(show_spinner=False)
@@ -430,10 +346,10 @@ def main():
 
         # Use globally defined example queries from configuration section
         for query in EXAMPLE_QUERIES:
-            # ✅ FIXED: Direkter callback statt pending state (verhindert Race Condition)
-            if st.button(query, key=f"sidebar_{query}", use_container_width=True, 
-                        on_click=process_user_query, args=(query,)):
-                pass  # Callback wird automatisch ausgeführt
+            # ✅ Set pending query in session state instead of callback
+            if st.button(query, key=f"sidebar_{query}", use_container_width=True):
+                st.session_state.pending_query = query
+                st.rerun()
 
         st.divider()
         
@@ -505,11 +421,8 @@ def main():
     # Load and display history FIRST (before processing new queries)
     history = st.session_state.conversation.get_history()
     
-    # Chat container with all messages (static display)
-    # Show all history EXCEPT the last interaction if we're currently processing
-    history_to_show = history
-    
-    for _ , entry in enumerate(history_to_show):
+    # Display all history messages
+    for _ , entry in enumerate(history):
         # User message
         with st.chat_message(name="user", avatar="🧑"):
             st.write(entry["user"])
@@ -520,29 +433,91 @@ def main():
             if response_text.startswith("❌ **ERROR:**"):
                 st.error(response_text)
             else:
-                # ✅ Check for charts in history
-                text_content, chart_path = extract_chart_path(response_text)
+                # ✅ Check for charts in history (handle multiple charts)
+                text_content, chart_paths = extract_all_chart_paths(response_text)
                 
                 st.markdown(text_content)
                 
-                # ✅ Render chart if found in history
-                if chart_path:
+                # ✅ Render ALL charts if found in history
+                if chart_paths:
                     chart_size = st.session_state.get('chart_size', 'Mittel')
-                    render_chart(chart_path, size=chart_size)
+                    for chart_path in chart_paths:
+                        render_chart(chart_path, size=chart_size)
 
 # ============================================================================
 # CHAT INPUT AT BOTTOM - Fixed position
 # ============================================================================
 
-    # ✅ FIXED: Kein pending_example_query mehr - direkter callback verhindert Race Condition
+    # ✅ Check for pending query from sidebar
+    if "pending_query" in st.session_state:
+        user_input = st.session_state.pending_query
+        del st.session_state.pending_query
+    else:
+        # User input at the bottom of the page
+        user_input = st.chat_input("Ask about customer feedback...")
 
-    # User input at the bottom of the page
-    user_input = st.chat_input("Ask about customer feedback...")
-
-    # Process chat input if provided (this adds to history internally)
+    # ✅ Process query with LIVE streaming, then rerun
     if user_input:
-        # Use unified query processing function with direct chat integration
-        process_user_query(user_input)
+        # Show user message immediately
+        with st.chat_message("user", avatar="🧑"):
+            st.write(user_input)
+        
+        # Show streaming response with "Thinking..." indicator
+        with st.chat_message("assistant", avatar="🧠"):
+            # ✅ Create placeholder for progressive display
+            response_placeholder = st.empty()
+            
+            # ✅ Show "Thinking..." while waiting for first token
+            response_placeholder.markdown("_Thinking..._")
+            
+            # ✅ LIVE Token-Streaming from OpenAI (replaces "Thinking...")
+            streamed_text = response_placeholder.write_stream(
+                stream_agent_response(
+                    st.session_state.customer_manager,
+                    user_input,
+                    ensure_session_initialized(),
+                    HISTORY_LIMIT
+                )
+            )
+            
+            # After streaming, check for charts (handle multiple)
+            final_result = st.session_state.get('_streaming_final_result', None)
+            if final_result and final_result.get("type") != "error":
+                raw_response = final_result.get('final_output', streamed_text)
+                text_content, chart_paths = extract_all_chart_paths(raw_response)
+                if chart_paths:
+                    chart_size = st.session_state.get('chart_size', 'Mittel')
+                    for chart_path in chart_paths:
+                        render_chart(chart_path, size=chart_size)
+        
+        # After display, save to history and trigger rerun
+        # Process in background to save to history
+        final_result = st.session_state.get('_streaming_final_result', None)
+        
+        if final_result and final_result.get("type") == "error":
+            error_message = f"❌ **ERROR ({final_result.get('error_type', 'Unknown')}):** {final_result['error']}"
+            response_content = error_message
+            agent_name_str = "Assistant"
+        elif final_result:
+            raw_response = final_result.get('final_output', streamed_text)
+            agent_name_str = final_result.get('agent_name', 'Assistant')
+            response_content = raw_response
+        else:
+            response_content = streamed_text
+            agent_name_str = "Assistant"
+        
+        # Cleanup
+        if '_streaming_final_result' in st.session_state:
+            del st.session_state._streaming_final_result
+        
+        # Save to history - ensure response_content is string
+        st.session_state.conversation.add_interaction(
+            user_input=user_input,
+            agent_response=str(response_content) if response_content else "",
+            agent_name=agent_name_str)
+        
+        # Trigger rerun to show clean history
+        st.rerun()
 
 # ============================================================================
 # FOOTER - Modular Footer with Live Statistics
