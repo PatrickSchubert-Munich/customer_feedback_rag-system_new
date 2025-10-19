@@ -176,9 +176,7 @@ def load_csv(
             df_synthetic = generator.generate_enterprise_dataset(
                 n_samples=n_synthetic_samples,
                 start_date=synthetic_start_date,
-                end_date=synthetic_end_date,
-                ensure_diversity=True,
-                include_metadata=True
+                end_date=synthetic_end_date
             )
             
             # Speichere generierte Daten
@@ -449,13 +447,16 @@ def extract_chart_path(text: str) -> tuple[str, str | None]:
     """
     Extrahiert Chart-Pfad aus Response-Text (Format: __CHART__[pfad]__CHART__).
     
+    IMPORTANT: Returns only the FIRST chart path found!
+    For multiple charts, use extract_all_chart_paths() instead.
+    
     Args:
         text: Text der möglicherweise Chart-Marker enthält
     
     Returns:
         tuple: (text_without_chart_marker, chart_path or None)
             - text_without_chart_marker: Bereinigter Text ohne Marker
-            - chart_path: Pfad zum Chart oder None
+            - chart_path: Pfad zum ERSTEN Chart oder None
     
     Beispiel:
         >>> text = "Analysis complete __CHART__./charts/plot.png__CHART__"
@@ -472,6 +473,32 @@ def extract_chart_path(text: str) -> tuple[str, str | None]:
         return text_without_marker, chart_path
     
     return text, None
+
+
+def extract_all_chart_paths(text: str) -> tuple[str, list[str]]:
+    """
+    Extrahiert ALLE Chart-Pfade aus Response-Text.
+    
+    Args:
+        text: Text der möglicherweise mehrere Chart-Marker enthält
+    
+    Returns:
+        tuple: (text_without_markers, list_of_chart_paths)
+            - text_without_markers: Bereinigter Text ohne alle Marker
+            - list_of_chart_paths: Liste aller gefundenen Chart-Pfade
+    
+    Beispiel:
+        >>> text = "Here are the charts: __CHART__./chart1.png__CHART__ and __CHART__./chart2.png__CHART__"
+        >>> clean_text, paths = extract_all_chart_paths(text)
+        >>> print(paths)  # ["./chart1.png", "./chart2.png"]
+    """
+    pattern = r'__CHART__(.*?)__CHART__'
+    matches = re.findall(pattern, text)
+    
+    chart_paths = [match.strip() for match in matches]
+    text_without_markers = re.sub(pattern, '', text).strip()
+    
+    return text_without_markers, chart_paths
 
 
 def limit_session_history(session, max_history: int | None = None):
